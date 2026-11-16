@@ -50,7 +50,7 @@ class ImePhase3Test {
             requireNotNull(device.wait(Until.findObject(By.descStartsWith("回车：").pkg(pkg)), 8000)).click()
             device.waitForIdle()
             assertTrue(device.wait(Until.hasObject(By.clazz("android.widget.EditText").pkg(pkg).text("nihao")), 5000))
-            assertFalse(device.hasObject(By.res("candidate_toggle").pkg(pkg)))
+            assertFalse("Candidates must disappear after raw return", has("candidate_toggle"))
             typePinyin()
             tap("candidate:0")
             assertTrue(device.wait(Until.hasObject(By.clazz("android.widget.EditText").pkg(pkg).text("nihao你好")), 5000))

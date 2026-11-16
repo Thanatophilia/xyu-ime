@@ -274,6 +274,8 @@ private fun KeyboardSurface(
     } else if (compactLandscape) 23.dp else 28.dp
     val stripScroll = remember(state.candidateRevision) { LazyListState() }
     val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
+    val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
+        animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
     val panelHeight = (
         keyboardHeight - (outerPadding * 2) - stripHeight - bottomHeight - (rowGap * 2)
@@ -297,12 +299,16 @@ private fun KeyboardSurface(
                 .height(stripHeight),
         )
 
-        if (state.preedit.isNotEmpty() && state.candidatesExpanded) {
-            // Ordinary keys are absent while expanded: no touch or accessibility
-            // targets can leak through the candidate surface.
+        if (state.preedit.isNotEmpty() && (state.candidatesExpanded || reveal > 0f)) {
+            // Ordinary keys are absent during both opening and closing: no touch or
+            // accessibility targets can leak through the animated candidate surface.
             Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)) {
-                CandidateDrawer(state, onAction, drawerScroll, Modifier.fillMaxSize())
+                CandidateDrawer(state, onAction, drawerScroll,
+                    Modifier.fillMaxSize().graphicsLayer {
+                        translationY = -(1f - reveal) * size.height
+                        alpha = reveal
+                    })
             }
         } else {
         Box(
