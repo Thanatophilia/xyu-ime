@@ -1,8 +1,16 @@
 # 絮雨输入法 · Xyu IME
 
-以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。当前阶段先验证英文键盘和系统窗口适配，下一阶段再接入 Rime/librime。
+以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。第一阶段英文键盘及系统窗口适配已完成，并通过用户实机验收。后续先完善基础编辑能力，再接入 Rime/librime 中文输入，最后推进布局优化与键盘自定义。
 
-## 第一阶段
+## 第一阶段 · 已完成
+
+- 验收基线：**0.1.22**，代码提交 [`590c53c`](https://github.com/Thanatophilia/xyu-ime/commit/590c53c39388b83e78d1bfaa0c0202ffec5ae660)。
+- 云端构建：[Android APK #22](https://github.com/Thanatophilia/xyu-ime/actions/runs/43832857853)，编译、5 项单元测试、Android Lint、Android 16 模拟器冒烟测试及 APK 签名校验通过。
+- 实机验收：2026-11-16，用户在 realme RMX3852 / Android 16 上反馈测试均无问题，确认阶段一完成。
+- 保留应用内文本、密码、数字、搜索四类试打输入框，作为后续版本的复测入口。
+- 符号页布局调整已记录，待基础功能完善后再处理。
+
+### 已交付功能
 
 - Android 8.0（API 26）及以上；compile / target SDK 36。
 - QWERTY 字母区 10 / 9 / 7 错列，Shift、删除位于第三行两侧。
