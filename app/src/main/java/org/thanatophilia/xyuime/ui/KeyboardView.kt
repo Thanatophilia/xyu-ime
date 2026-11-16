@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -443,8 +444,15 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
         }
     } else {
         Modifier.pointerInput(onLongClick != null) {
-            androidx.compose.foundation.gestures.detectTapGestures(
-                onPress = { pressed = true; try { tryAwaitRelease() } finally { pressed = false } },
+            detectTapGestures(
+                onPress = {
+                    pressed = true
+                    try {
+                        this.tryAwaitRelease()
+                    } finally {
+                        pressed = false
+                    }
+                },
                 onTap = { view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); click() },
                 onLongPress = if (onLongClick == null) null else { _ ->
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
