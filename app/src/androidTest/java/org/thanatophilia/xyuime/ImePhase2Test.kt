@@ -22,7 +22,8 @@ class ImePhase2Test {
     private val pkg = context.packageName
     private fun node(selector: BySelector): UiObject2 = requireNotNull(device.wait(Until.findObject(selector), 8_000)) { "Missing UI control: $selector" }
     private fun key(text: String) {
-        val matches = device.findObjects(By.text(text).pkg(pkg))
+        val textMatches = device.findObjects(By.text(text).pkg(pkg))
+        val matches = if (textMatches.isNotEmpty()) textMatches else device.findObjects(By.desc(text).pkg(pkg))
         require(matches.isNotEmpty()) { "Missing key: $text" }
         matches.last().click()
         device.waitForIdle()
@@ -39,13 +40,13 @@ class ImePhase2Test {
     private fun openEditor() {
         var field = editor()
         repeat(3) {
-            if (field.isFocused) return@repeat
             field.click()
             device.waitForIdle()
             val keyboard = device.wait(Until.findObject(By.text("q").pkg(pkg)), 5_000)
-            if (keyboard != null) return@repeat
+            if (keyboard != null) return
             field = editor()
         }
+        error("Keyboard did not appear after focusing trial editor")
     }
     private fun expectText(text: String) {
         assertTrue("Expected editor content: $text", device.wait(Until.hasObject(By.clazz("android.widget.EditText").pkg(pkg).text(text)), 5_000))
@@ -107,9 +108,11 @@ class ImePhase2Test {
 
     @Test fun completeEmojiDeleteAndPasswordClipboardProtection() = withIme {
         // The explicit sample fixture contains no personal/user clipboard content.
+        device.pressBack()
+        key("文本")
         device.swipe(540, 1300, 540, 700, 20)
         device.waitForIdle()
-        key("填入 emoji 样例")
+        node(By.text("填入 emoji 样例").pkg(pkg)).click()
         editor().click()
         node(By.text("q").pkg(pkg))
         val expected = listOf("A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣é", "A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣", "A👨‍👩‍👧‍👦👍🏽🇨🇳", "A👨‍👩‍👧‍👦👍🏽", "A👨‍👩‍👧‍👦", "A", "")

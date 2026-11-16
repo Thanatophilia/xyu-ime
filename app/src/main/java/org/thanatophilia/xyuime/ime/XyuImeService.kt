@@ -139,6 +139,15 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        // Some editors reuse a connection without a fresh onStartInput callback. Reset
+        // view-only controls here so a previous editing panel never leaks into a new field.
+        inputSession++
+        caseState.reset()
+        keyboardState = keyboardState.copy(
+            page = if (EditorPolicy.prefersNumbers(info?.inputType ?: currentInputEditorInfo?.inputType ?: 0)) KeyboardPage.Numbers else KeyboardPage.Letters,
+            editing = false,
+            selecting = false,
+        )
         inputViewActive = true
         if (!registry.currentState.isAtLeast(Lifecycle.State.STARTED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         if (!registry.currentState.isAtLeast(Lifecycle.State.RESUMED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
