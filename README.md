@@ -41,11 +41,11 @@
 
 ## 第三阶段 · 云端完成，用户设备待验收
 
-- 候选交付版本：**0.3.47**（versionCode 47），代码提交 [`df6c911`](https://github.com/Thanatophilia/xyu-ime/commit/df6c9119889594b15efdde6a26108aaaaf550a0a)，Actions [#47](https://github.com/Thanatophilia/xyu-ime/actions/runs/43929414185) 全部门禁成功。候选栏固定在字母区上方并常驻预留高度，拼音出现时不再压缩或移动字母键与底部七键。
-- APK：[xyu-ime-0.3.47.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43929414185)；SHA256：`a1fac2fa4c69a7b999b5300aa1d45f08aa14da0d407de1486d8065e6e141ea14`，下载后与同包校验和复核一致。
-- 最新实际测试报告：app JVM **21 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **15 passed**；Rime Android 36 **4 passed**；合计 **41 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 13 warnings / 4 hints**。
+- 候选交付版本：**0.3.51**（versionCode 51），代码提交 [`3f3e996`](https://github.com/Thanatophilia/xyu-ime/commit/3f3e9965cde56ef0c1f8e4dfa88eaad2291fcc4b)，Actions [#51](https://github.com/Thanatophilia/xyu-ime/actions/runs/43945020468) 全部门禁成功。编码与候选栏已分离：编码独立悬浮在键盘物理左上方，不参与键盘测量或改变应用窗口；候选栏保留固定单行与展开按钮。
+- APK：[xyu-ime-0.3.51.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43945020468)；SHA256：`2e03e51ec20685f8393e4a49f15cd244e100e3cf1eb6fe297e8907c994336eb5`，下载后与同包校验和复核一致。
+- 最新实际测试报告：app JVM **21 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **19 passed**；Rime Android 36 **4 passed**；合计 **45 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 15 warnings / 4 hints**。新增 4 项实测覆盖编码浮窗与主键盘分离、应用窗口/IME inset/按键坐标不变、触摸透传、提交和单次返回关闭。
 - 交付门禁证据：`apksigner verify --verbose --print-certs` 输出 **Verifies**、v2 **true**；固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。`zipalign -c -P 16 -v 4` 输出 **Verification successful**；`verify-apk.py` 在 CI 和下载后本地复验均通过，仅含 **arm64-v8a / x86_64**，4 个原生库各 3 个 ELF LOAD 段满足 16 KB 对齐，Rime 资源齐全。
-- 已撤销 0.3.45 的交付结论：该包混入 armeabi-v7a/x86，且 verifier 失败被 tee 掩盖。0.3.46 已限定双 ABI，并直接重定向验证输出；CI 使用 `bash -e`，原生验证、对齐或签名失败均会中止步骤。0.3.46 原始 artifact 的 READ-ME.md 仍含旧版说明，请以本页及最新手机验收清单为准；APK、BUILD.txt 与校验和均为 0.3.46。
+- 历史记录：0.3.45 混入额外 ABI、验证失败被 tee 掩盖，0.3.46 已纠正；0.3.47 修复候选栏挤压键盘。0.3.51 进一步实现独立悬浮编码。CI 使用 `bash -e`，原生验证、对齐或签名失败会中止步骤。原始 artifact 的 READ-ME.md 为构建前文档快照，请以本页及最新验收清单为准；当前 APK、BUILD.txt 与校验和对应 0.3.51。
 - 状态：**云端完成；用户设备验收待完成**。安装包保留候选抽屉展开时隐藏普通键和底部七键的行为。
 - [阶段三手机验收清单](docs/acceptance-phase3.md)。
 
