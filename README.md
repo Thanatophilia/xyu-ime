@@ -1,6 +1,6 @@
 # 絮雨输入法 · Xyu IME
 
-以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。阶段三已接入离线 Rime/librime 简体全拼，云端回归与候选 APK 已完成，用户实机验收待完成。阶段二主体已验收，句首大写修正版仍待用户复测。后续再推进布局优化与键盘自定义。
+以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。阶段三已接入离线 Rime/librime 简体全拼，云端回归与候选 APK 已完成。0.3.51 独立悬浮编码的核心显示效果已获用户实机认可，作为当前显示基线归档；仍需优化，阶段三完整实机验收待完成。阶段二主体已验收，句首大写修正版仍待用户复测。后续再推进布局优化与键盘自定义。
 
 ## 第一阶段 · 已完成
 
@@ -39,14 +39,15 @@
 - 原符号页布局与底部七键顺序保留。本阶段尚未接入 Rime 与中文。
 - [阶段二手机验收清单](docs/acceptance-phase2.md)。
 
-## 第三阶段 · 云端完成，用户设备待验收
+## 第三阶段 · 悬浮编码显示基线已归档，完整实机验收待完成
 
 - 候选交付版本：**0.3.51**（versionCode 51），代码提交 [`3f3e996`](https://github.com/Thanatophilia/xyu-ime/commit/3f3e9965cde56ef0c1f8e4dfa88eaad2291fcc4b)，Actions [#51](https://github.com/Thanatophilia/xyu-ime/actions/runs/43945020468) 全部门禁成功。编码与候选栏已分离：编码独立悬浮在键盘物理左上方，不参与键盘测量或改变应用窗口；候选栏保留固定单行与展开按钮。
 - APK：[xyu-ime-0.3.51.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43945020468)；SHA256：`2e03e51ec20685f8393e4a49f15cd244e100e3cf1eb6fe297e8907c994336eb5`，下载后与同包校验和复核一致。
 - 最新实际测试报告：app JVM **21 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **19 passed**；Rime Android 36 **4 passed**；合计 **45 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 15 warnings / 4 hints**。新增 4 项实测覆盖编码浮窗与主键盘分离、应用窗口/IME inset/按键坐标不变、触摸透传、提交和单次返回关闭。
 - 交付门禁证据：`apksigner verify --verbose --print-certs` 输出 **Verifies**、v2 **true**；固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。`zipalign -c -P 16 -v 4` 输出 **Verification successful**；`verify-apk.py` 在 CI 和下载后本地复验均通过，仅含 **arm64-v8a / x86_64**，4 个原生库各 3 个 ELF LOAD 段满足 16 KB 对齐，Rime 资源齐全。
 - 历史记录：0.3.45 混入额外 ABI、验证失败被 tee 掩盖，0.3.46 已纠正；0.3.47 修复候选栏挤压键盘。0.3.51 进一步实现独立悬浮编码。CI 使用 `bash -e`，原生验证、对齐或签名失败会中止步骤。原始 artifact 的 READ-ME.md 为构建前文档快照，请以本页及最新验收清单为准；当前 APK、BUILD.txt 与校验和对应 0.3.51。
-- 状态：**云端完成；用户设备验收待完成**。安装包保留候选抽屉展开时隐藏普通键和底部七键的行为。
+- 实机反馈与小阶段归档：2026-11-17，用户对 0.3.51 反馈“还好，有需要优化的，至少效果做对了”，并要求将这一小阶段提交 GitHub。记录为**独立悬浮编码与候选栏分离的核心显示效果认可**，以 0.3.51 保留当前显示基线；具体优化项尚未明确。
+- 状态：**本次显示小阶段已归档；阶段三完整功能与兼容性实机验收仍待完成**。候选抽屉展开时替换普通键盘及底部七键的结构继续保留，不能将本次反馈扩大为全部验收项通过。
 - [阶段三手机验收清单](docs/acceptance-phase3.md)。
 
 ## APK 云端构建
