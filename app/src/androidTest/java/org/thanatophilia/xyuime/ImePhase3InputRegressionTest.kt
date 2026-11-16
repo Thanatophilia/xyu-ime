@@ -8,6 +8,14 @@ import android.os.Environment
 import android.os.SystemClock
 import android.text.InputType
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.inspector.WindowInspector
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
+import kotlin.math.roundToInt
 import android.view.WindowInsets
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
@@ -278,15 +286,54 @@ class ImePhase3InputRegressionTest {
         error("Editor/IME geometry did not settle (visible=$imeVisible): $previous")
     }
 
+    private data class CodeWindow(val bounds: Rect, val texts: List<String>, val independent: Boolean)
+
+    /** Non-touchable windows are intentionally absent from Android's accessibility window list.
+     * Inspect the attached real View/Compose roots instead; do not change product touch flags.
+     */
+    private fun floatingWindow(): CodeWindow? {
+        var result: CodeWindow? = null
+        instrumentation.runOnMainSync {
+            fun visit(view: View) {
+                if (!view.isAttachedToWindow || !view.isShown) return
+                if (view is ViewRootForTest) {
+                    val nodes = view.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false)
+                    val code = nodes.firstOrNull { it.config.getOrNull(SemanticsProperties.TestTag) == "floating_preedit" }
+                    if (code != null) {
+                        val position = code.positionOnScreen
+                        val size = code.size
+                        val bounds = Rect(position.x.roundToInt(), position.y.roundToInt(),
+                            position.x.roundToInt() + size.width, position.y.roundToInt() + size.height)
+                        result = CodeWindow(bounds,
+                            code.config.getOrNull(SemanticsProperties.Text)?.map { it.text }.orEmpty(),
+                            nodes.none { it.config.getOrNull(SemanticsProperties.TestTag) in
+                                listOf("keyboard_surface", "candidate_strip") })
+                    }
+                }
+                if (view is ViewGroup) for (index in 0 until view.childCount) visit(view.getChildAt(index))
+            }
+            WindowInspector.getGlobalWindowViews().forEach(::visit)
+        }
+        return result
+    }
+
     private fun noFloatingPreedit() {
-        assertTrue("Floating preedit must disappear",
-            device.waitForFreshGone(By.res("floating_preedit").pkg(pkg), 5_000))
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (floatingWindow() != null && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+        assertNull("Floating preedit window must actually detach", floatingWindow())
     }
 
     private fun assertFloatingPreedit(code: String): Rect {
         val surface = node("keyboard_surface").visibleBounds
-        val popupNode = node("floating_preedit")
-        val popup = popupNode.visibleBounds
+        val deadline = SystemClock.uptimeMillis() + 8_000
+        var window = floatingWindow()
+        while ((window == null || window.bounds.isEmpty) && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(50)
+            window = floatingWindow()
+        }
+        if (window == null) floatingScreenshot("phase3-floating-missing")
+        val codeWindow = requireNotNull(window) { "Attached floating encoding window not found" }
+        val popup = codeWindow.bounds
         // The tag can describe Text inside the bubble's 10dp horizontal content padding.
         val insetTolerance = ceil(12 * context.resources.displayMetrics.density).toInt()
         assertFalse("Popup must expose nonempty screen bounds: $popup", popup.isEmpty)
@@ -297,17 +344,10 @@ class ImePhase3InputRegressionTest {
         assertTrue("Popup must fit the keyboard width: popup=$popup, surface=$surface",
             popup.right <= surface.right + 1)
         assertTrue("Popup must remain on screen: $popup", popup.top >= 0)
-        // Text may be on the tagged container or a descendant of that Compose node.
-        val texts = listOfNotNull(popupNode.text) +
-            popupNode.findObjects(By.text(java.util.regex.Pattern.compile(".+"))).mapNotNull { it.text }
+        val texts = codeWindow.texts
         assertTrue("Popup must expose the current code '$code'; actual=$texts",
             texts.any { it.replace(" ", "") == code.replace(" ", "") })
-        var ancestor: UiObject2? = popupNode.parent
-        while (ancestor != null) {
-            assertNotEquals("Popup must not be a candidate-strip descendant",
-                "candidate_strip", ancestor.resourceName)
-            ancestor = ancestor.parent
-        }
+        assertTrue("Encoding must belong to a separate Compose/window root", codeWindow.independent)
         val strip = node("candidate_strip")
         assertFalse("Candidate strip must not contain the floating code",
             strip.hasObject(By.res("floating_preedit")))
