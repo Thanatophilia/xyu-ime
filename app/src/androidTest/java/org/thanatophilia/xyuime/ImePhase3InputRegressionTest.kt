@@ -719,7 +719,7 @@ class ImePhase3InputRegressionTest {
         }
     }
 
-    @Test fun candidateToolsDeleteClearAndReturnPreserveCommittedText() = withChineseEditor {
+    @Test fun candidateToolsDeletePagingAndCommitPreserveCommittedText() = withChineseEditor {
         typeLetters("nihao")
         enter("完成")
         awaitSnapshot("Seed committed text") { it.text == "nihao" && it.composing == null }
@@ -749,12 +749,12 @@ class ImePhase3InputRegressionTest {
         noCandidates()
         noFloatingPreedit()
         assertEquals(geometry, settledEditorGeometry())
-        // Removing the last code character is delete, not clear: e must stay until Enter.
+        // Removing the last code character is delete, not clear: composition ends, text stays.
         typeLetters("e")
         tap("candidate_toggle")
         tap("candidate_delete")
-        awaitSnapshot("Deleting the last code keeps the composition alive") {
-            it.text == "nihaoniha" && it.composing == ""
+        awaitSnapshot("Deleting the last code ends the composition without deleting text") {
+            it.text == "nihaoniha" && it.composing == null && it.actions.isEmpty()
         }
         SystemClock.sleep(300)
         assertEquals("nihaoniha", snapshot().text)

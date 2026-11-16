@@ -533,8 +533,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             KeyboardAction.NextLanguage, KeyboardAction.ToggleCandidates,
             is KeyboardAction.SelectCandidate, is KeyboardAction.LoadMoreCandidates,
             is KeyboardAction.SetChinese,
-            is KeyboardAction.CandidateBackspace, is KeyboardAction.ClearCandidateComposition,
-            is KeyboardAction.ReturnFromCandidates -> Unit
+            is KeyboardAction.CandidateBackspace, is KeyboardAction.CandidatePage,
+            is KeyboardAction.CandidateCommit -> Unit
             KeyboardAction.PickInputMethod -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
         }
     }

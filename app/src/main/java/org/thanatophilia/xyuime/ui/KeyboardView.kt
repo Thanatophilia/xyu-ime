@@ -463,6 +463,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
     onWordFilter: (CandidateWordFilter) -> Unit, modifier: Modifier) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
+    val fontScale = LocalDensity.current.fontScale
     val candidates = remember(state.candidates, state.candidateComments) {
         drawerCandidates(state.candidates, state.candidateComments)
     }
@@ -502,9 +503,9 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             item(key = "type") {
                 // Low, narrow rail: cycles only between 全部 and 单字; 词语 stays filtered out here.
                 val typeLabel = if (wordFilter == CandidateWordFilter.Single) "单字" else "全部"
-                SyllableChoice("·$typeLabel", false, {
-                    wordFilter = if (wordFilter == CandidateWordFilter.Single) CandidateWordFilter.All
-                    else CandidateWordFilter.Single
+                SyllableChoice(null, wordFilter == CandidateWordFilter.Single, {
+                    onWordFilter(if (wordFilter == CandidateWordFilter.Single) CandidateWordFilter.All
+                    else CandidateWordFilter.Single)
                 }, tag = "candidate_type", label = typeLabel)
             }
         }
