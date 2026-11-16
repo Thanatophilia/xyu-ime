@@ -18,7 +18,7 @@ class ImePhase3Test {
         val device = UiDevice.getInstance(instrumentation)
         val pkg = context.packageName
         val previous = device.executeShellCommand("settings get secure default_input_method").trim()
-        fun control(tag: String) = requireNotNull(device.wait(Until.findObject(By.res(tag).pkg(pkg)), 15000)) { tag }
+        fun control(tag: String) = requireNotNull(device.waitForFreshObject(By.res(tag).pkg(pkg), 15000)) { tag }
         fun tap(tag: String) { control(tag).click(); device.waitForIdle() }
         fun typePinyin() { for (letter in "nihao") tap("key:$letter") }
         try {
@@ -29,7 +29,7 @@ class ImePhase3Test {
             context.startActivity(Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(pkg)), 8000)).click()
-            assertTrue(device.wait(Until.hasObject(By.text("絮雨 · English").pkg(pkg)), 120000))
+            assertNotNull(device.waitForFreshObject(By.text("絮雨 · English").pkg(pkg), 120000))
             tap("key:切换语言，长按切换输入法")
             typePinyin()
             control("candidate:0")

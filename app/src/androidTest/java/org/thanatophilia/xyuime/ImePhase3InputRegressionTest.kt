@@ -56,13 +56,12 @@ class ImePhase3InputRegressionTest {
     }
 
     private fun freshTree() {
-        if (Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache()
-        device.waitForIdle()
+        device.freshImeTree()
     }
 
     private fun node(tag: String): UiObject2 {
         freshTree()
-        return requireNotNull(device.wait(Until.findObject(By.res(tag).pkg(pkg)), 15_000)) { tag }
+        return requireNotNull(device.waitForFreshObject(By.res(tag).pkg(pkg), 15_000)) { tag }
     }
 
     private fun tap(tag: String) { node(tag).click(); device.waitForIdle() }
@@ -71,7 +70,7 @@ class ImePhase3InputRegressionTest {
     private fun noCandidates() {
         freshTree()
         assertTrue("Candidate strip must disappear after commit",
-            device.wait(Until.gone(By.res("candidate_toggle").pkg(pkg)), 5_000))
+            device.waitForFreshGone(By.res("candidate_toggle").pkg(pkg), 5_000))
         assertFalse(device.hasObject(By.res("candidate_drawer").pkg(pkg)))
     }
 
@@ -109,11 +108,11 @@ class ImePhase3InputRegressionTest {
             }
             // A previously running service may retain the Chinese preference.
             val ready = By.text(java.util.regex.Pattern.compile("絮雨 · (English|中文拼音)")).pkg(pkg)
-            assertTrue("Rime deployment must finish", device.wait(Until.hasObject(ready), 120_000))
+            assertNotNull("Rime deployment must finish", device.waitForFreshObject(ready, 120_000))
             if (!device.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg))) {
                 tap("key:切换语言，长按切换输入法")
             }
-            val chineseReady = device.wait(Until.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg)), 15_000)
+            val chineseReady = device.waitForFreshObject(By.text("絮雨 · 中文拼音").pkg(pkg), 15_000) != null
             assertTrue("Chinese mode not reached; headers=" + device.findObjects(By.textStartsWith("絮雨 ·").pkg(pkg)).map { it.text }, chineseReady)
             test()
         } finally {
