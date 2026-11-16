@@ -727,8 +727,8 @@ class ImePhase3InputRegressionTest {
         typeLetters("nihao")
         tap("candidate_toggle")
         val grid = node("candidate_grid").visibleBounds
-        val tools = node("candidate_tools").visibleBounds
-        assertTrue("Tools belong to the right of candidates", grid.right <= tools.left)
+        val toolsBounds = node("candidate_tools").visibleBounds
+        assertTrue("Tools belong to the right of candidates", grid.right <= toolsBounds.left)
         floatingScreenshot("phase3-candidate-tools")
         tap("candidate_delete")
         awaitSnapshot("Delete edits only the current code") {
