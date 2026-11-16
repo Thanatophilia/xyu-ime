@@ -68,7 +68,9 @@ class ImePhase3InputRegressionTest {
 
     private fun node(tag: String): UiObject2 {
         freshTree()
-        return requireNotNull(device.waitForFreshObject(By.res(tag).pkg(pkg), 15_000)) { tag }
+        val result = device.waitForFreshObject(By.res(tag).pkg(pkg), 15_000)
+        if (result == null && tag == "floating_preedit") floatingScreenshot("phase3-floating-missing")
+        return requireNotNull(result) { tag }
     }
 
     private fun tap(tag: String) { node(tag).click(); device.waitForIdle() }
@@ -326,9 +328,13 @@ class ImePhase3InputRegressionTest {
         assertTrue("Screenshot must be saved: $name.png", device.takeScreenshot(screenshot))
         // Existing emulator-smoke.sh pulls this directory, including successful tests.
         val review = "/sdcard/Download/xyu-ime-review"
-        val copied = device.executeShellCommand(
-            "mkdir -p '$review' && cp '${hierarchy.absolutePath}' '${screenshot.absolutePath}' '$review/' && echo copied")
-        assertEquals("CI review artifacts must be copied", "copied", copied.trim())
+        device.executeShellCommand("mkdir -p $review")
+        device.executeShellCommand("cp ${hierarchy.absolutePath} $review/")
+        device.executeShellCommand("cp ${screenshot.absolutePath} $review/")
+        // UiAutomation executes an argv command, not a shell script (&& is not interpreted).
+        val windows = File(directory, "$name-windows.txt")
+        windows.writeText(device.executeShellCommand("dumpsys window windows"))
+        device.executeShellCommand("cp ${windows.absolutePath} $review/")
     }
 
     @Test fun floatingPreeditStaysAboveKeyboardWithoutResizingAppOrKeys() = withChineseEditor {

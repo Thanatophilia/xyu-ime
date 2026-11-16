@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.widget.PopupWindow
+import org.thanatophilia.xyuime.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -59,6 +60,13 @@ class FloatingPreeditWindow(
     private var bounds = Rect()
     private var code by mutableStateOf("")
     private var pending = false
+    private var diagnostic = ""
+    private fun debug(value: String) {
+        if (BuildConfig.DEBUG && diagnostic != value) {
+            diagnostic = value
+            android.util.Log.d("XyuFloating", value) // Geometry/flags only; never input text.
+        }
+    }
     private val renderTask = Runnable { pending = false; render() }
 
     fun bind(view: View) {
@@ -98,8 +106,9 @@ class FloatingPreeditWindow(
 
     private fun render() {
         val view = anchor ?: return
-        val parent = parentComposition ?: return
+        val parent = parentComposition ?: run { debug("No composition context"); return }
         if (code.isEmpty() || bounds.isEmpty || !view.isAttachedToWindow || !view.isShown || view.windowToken == null) {
+            debug("hidden empty=${code.isEmpty()} bounds=$bounds attached=${view.isAttachedToWindow} shown=${view.isShown} token=${view.windowToken != null}")
             dismiss()
             return
         }
@@ -115,6 +124,7 @@ class FloatingPreeditWindow(
         val gap = ceil(4 * density.density).toInt()
         val available = keyboard.top - max(frame.top, 0) - gap
         val height = min(ceil(20 * density.scaledDensity + 12 * density.density).toInt(), available)
+        debug("keyboard=$keyboard visible=$frame popupSize=${width}x$height available=$available")
         if (width <= 0 || height <= 0) { dismiss(); return }
         val top = keyboard.top - gap - height
         // Attached subwindows use parent-window coordinates (also on API 26–28).
@@ -169,8 +179,10 @@ class FloatingPreeditWindow(
             }
         } catch (_: WindowManager.BadTokenException) {
             // A keyboard can be hidden between layout and this posted update.
+            debug("show failed: BadTokenException")
             dismiss()
         } catch (_: IllegalStateException) {
+            debug("show failed: IllegalStateException")
             dismiss()
         }
     }
