@@ -113,7 +113,8 @@ class ImePhase3InputRegressionTest {
             if (!device.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg))) {
                 tap("key:切换语言，长按切换输入法")
             }
-            assertTrue(device.wait(Until.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg)), 15_000))
+            val chineseReady = device.wait(Until.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg)), 15_000)
+            assertTrue("Chinese mode not reached; headers=" + device.findObjects(By.textStartsWith("絮雨 ·").pkg(pkg)).map { it.text }, chineseReady)
             test()
         } finally {
             activity?.let { host -> instrumentation.runOnMainSync { host.finish() } }

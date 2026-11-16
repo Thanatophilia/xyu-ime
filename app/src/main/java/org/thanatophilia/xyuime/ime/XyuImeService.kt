@@ -396,6 +396,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         when (action) {
             is KeyboardAction.SetChinese -> { switchLanguage(action.enabled); return }
             KeyboardAction.NextLanguage -> {
+                if (org.thanatophilia.xyuime.BuildConfig.DEBUG) android.util.Log.d("XyuState", "language allowed=$chineseAllowed ready=$engineReady preferred=$chinesePreferred busy=$engineBusy")
                 if (!chineseAllowed) { showNotice("此输入框使用安全英文直输"); return }
                 if (!engineReady) { prepareChinese(); showNotice("正在准备词库，可继续英文输入"); return }
                 switchLanguage(!chinesePreferred); return
