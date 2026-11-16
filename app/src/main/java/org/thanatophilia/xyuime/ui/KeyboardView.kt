@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
@@ -497,7 +498,7 @@ private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shap
 @Composable
 private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
     modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false, enabled: Boolean = true,
-    onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
+    decorative: Boolean = false, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     val view = LocalView.current
     val configuration = LocalViewConfiguration.current
@@ -559,8 +560,13 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
             )
         }
     }
+    if (decorative) {
+        // Decorative backgrounds must never appear as separate clickable accessibility nodes.
+        Box(modifier.clip(shape).background(background).border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape))
+        return
+    }
     Box(modifier.clip(shape).background(background).border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
-        .semantics(mergeDescendants = true) {
+        .then(gesture).clearAndSetSemantics {
             role = Role.Button
             contentDescription = description
             if (!enabled) disabled()
@@ -568,11 +574,11 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
             if (onLongClick != null && enabled) {
                 this.onLongClick(label = "长按") { longClick?.invoke(); true }
             }
-        }.then(gesture), contentAlignment = Alignment.Center) {
+        }, contentAlignment = Alignment.Center) {
         if (icon != null) {
-            KeyIcon(icon, foreground, locked, Modifier.size(22.dp))
+            KeyIcon(icon, foreground, locked, Modifier.clearAndSetSemantics {})
         } else {
-            Text(label, color = foreground,
+            Text(label, color = foreground, modifier = Modifier.clearAndSetSemantics {},
                 fontSize = adaptiveSp(if (small) 12f else 21f, fontScale, if (small) 14f else 25f),
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Clip)
