@@ -108,7 +108,7 @@ class ImePhase3InputRegressionTest {
                     .showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
             }
             // A previously running service may retain the Chinese preference.
-            val ready = By.textMatches("絮雨 · (English|中文拼音)").pkg(pkg)
+            val ready = By.text(java.util.regex.Pattern.compile("絮雨 · (English|中文拼音)")).pkg(pkg)
             assertTrue("Rime deployment must finish", device.wait(Until.hasObject(ready), 120_000))
             if (!device.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg))) {
                 tap("key:切换语言，长按切换输入法")
