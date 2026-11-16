@@ -434,7 +434,11 @@ class ImePhase3InputRegressionTest {
         typeLetters("nihao")
         awaitSnapshot("Second composition must be visible") { it.composing?.replace(" ", "") == "nihao" }
         assertFloatingPreedit("nihao")
-        val candidate = requireNotNull(node("candidate:0").text) { "Candidate must expose its commit text" }
+        val candidateNode = node("candidate:0")
+        val candidate = requireNotNull(candidateNode.text?.takeIf { it.isNotBlank() }
+            ?: candidateNode.findObject(By.text(java.util.regex.Pattern.compile(".+")))?.text) {
+            "Candidate must expose its commit text in its cell or text child"
+        }
         assertTrue("Candidate must not be empty", candidate.isNotBlank())
         tap("candidate:0")
         awaitSnapshot("Selection must commit the displayed candidate, preserving prior raw text") {
@@ -453,7 +457,10 @@ class ImePhase3InputRegressionTest {
             it.composing?.replace(" ", "") == "nihao" && it.actions.isEmpty()
         }
         assertFloatingPreedit("nihao")
-        assertTrue("Back must be injected", device.pressBack()) // Exactly one Back, never a retry.
+        // UiDevice.pressBack reports whether a new accessibility window was observed, not
+        // whether the key reached the IME (IME dismissal need not emit that event).
+        // Inject exactly one Back; prove its effect using real window/inset assertions below.
+        device.executeShellCommand("input keyevent KEYCODE_BACK")
         assertTrue("First Back must close the IME, not just its nonfocusable popup",
             device.waitForFreshGone(By.res("keyboard_surface").pkg(pkg), 8_000))
         noFloatingPreedit()
