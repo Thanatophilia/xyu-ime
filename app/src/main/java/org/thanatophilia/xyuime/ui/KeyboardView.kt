@@ -1,0 +1,512 @@
+package org.thanatophilia.xyuime.ui
+
+import android.content.res.Configuration
+import android.view.HapticFeedbackConstants
+import android.view.View
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+/** The three key fields exposed by the keyboard's fixed bottom controls. */
+enum class KeyboardPage {
+    Letters,
+    Numbers,
+    Symbols,
+}
+
+/**
+ * State rendered by [XyuKeyboard]. Text insertion and state transitions belong to the IME
+ * controller; this object only describes what the view should display.
+ */
+data class KeyboardUiState(
+    val page: KeyboardPage = KeyboardPage.Letters,
+    val uppercase: Boolean = false,
+    val capsLock: Boolean = false,
+    val actionLabel: String = "Enter",
+)
+
+/** Events emitted by [XyuKeyboard] for the IME controller to interpret. */
+sealed interface KeyboardAction {
+    data class Text(val value: String) : KeyboardAction
+
+    data object Shift : KeyboardAction
+
+    data object CapsLock : KeyboardAction
+
+    data object Backspace : KeyboardAction
+
+    data object Space : KeyboardAction
+
+    data object Enter : KeyboardAction
+
+    data object ToggleNumbers : KeyboardAction
+
+    data object ToggleSymbols : KeyboardAction
+
+    data object NextLanguage : KeyboardAction
+
+    data object PickInputMethod : KeyboardAction
+}
+
+private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
+
+private val XyuLightColors = lightColorScheme(
+    primary = Color(0xFF536C66),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFD6E5E0),
+    onPrimaryContainer = Color(0xFF17332D),
+    background = Color(0xFFF6F8F6),
+    onBackground = Color(0xFF1A211F),
+    surface = Color(0xFFF6F8F6),
+    onSurface = Color(0xFF1A211F),
+    surfaceVariant = Color(0xFFE5EBE8),
+    onSurfaceVariant = Color(0xFF4E5A56),
+    outline = Color(0xFF7B8984),
+)
+
+private val XyuDarkColors = darkColorScheme(
+    primary = Color(0xFFB4CEC5),
+    onPrimary = Color(0xFF1E3831),
+    primaryContainer = Color(0xFF355149),
+    onPrimaryContainer = Color(0xFFD6EDE4),
+    background = Color(0xFF171B19),
+    onBackground = Color(0xFFE1E8E4),
+    surface = Color(0xFF171B19),
+    onSurface = Color(0xFFE1E8E4),
+    surfaceVariant = Color(0xFF303936),
+    onSurfaceVariant = Color(0xFFC0CDC7),
+    outline = Color(0xFF89968F),
+)
+
+private val LETTER_ROW_ONE = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
+private val LETTER_ROW_TWO = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+private val LETTER_ROW_THREE = listOf("z", "x", "c", "v", "b", "n", "m")
+private val NUMBER_ROW_ONE = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+private val NUMBER_ROW_TWO = listOf("-", "+", "×", "÷", "=", "(", ")", "/", "%")
+private val NUMBER_ROW_THREE = listOf(",", ".", "(", ")", "%")
+private val SYMBOL_ROW_ONE = listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")")
+private val SYMBOL_ROW_TWO = listOf("-", "_", "+", "=", "{", "}", "[", "]", "|", "\\")
+private val SYMBOL_ROW_THREE = listOf(";", ":", "'", "\"", "?")
+
+/**
+ * Compose-only view for 絮雨. The host supplies state and handles all resulting actions.
+ */
+@Composable
+fun XyuKeyboard(
+    state: KeyboardUiState,
+    onAction: (KeyboardAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val configuration = LocalConfiguration.current
+    val compactLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val preferredHeight = if (compactLandscape) 180.dp else 268.dp
+    val maximumHeight = if (compactLandscape) 190.dp else 280.dp
+
+    MaterialTheme(
+        colorScheme = if (isSystemInDarkTheme()) XyuDarkColors else XyuLightColors,
+    ) {
+        BoxWithConstraints(
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(max = maximumHeight),
+        ) {
+            // The IME host can measure its first pass with an unbounded height. A fixed preferred
+            // height keeps that pass finite while still yielding to a smaller available height.
+            val keyboardHeight = if (maxHeight == Dp.Infinity) {
+                preferredHeight
+            } else {
+                maxHeight.coerceAtMost(preferredHeight)
+            }
+            KeyboardSurface(
+                state = state,
+                onAction = onAction,
+                compactLandscape = compactLandscape,
+                keyboardHeight = keyboardHeight,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(keyboardHeight),
+            )
+        }
+    }
+}
+
+@Composable
+private fun KeyboardSurface(
+    state: KeyboardUiState,
+    onAction: (KeyboardAction) -> Unit,
+    compactLandscape: Boolean,
+    keyboardHeight: Dp,
+    modifier: Modifier,
+) {
+    val density = LocalDensity.current
+    val fontScale = density.fontScale
+    val outerPadding = if (compactLandscape) 4.dp else 5.dp
+    val rowGap = if (compactLandscape) 3.dp else 5.dp
+    val stripHeight = if (compactLandscape) 23.dp else 28.dp
+    val bottomHeight = if (compactLandscape) 34.dp else 47.dp
+    val panelHeight = (
+        keyboardHeight - (outerPadding * 2) - stripHeight - bottomHeight - (rowGap * 2)
+    ).coerceAtLeast(1.dp)
+    val keyShape = RoundedCornerShape(if (compactLandscape) 7.dp else 9.dp)
+
+    Column(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = outerPadding, vertical = outerPadding),
+        verticalArrangement = Arrangement.spacedBy(rowGap),
+    ) {
+        InfoStrip(
+            fontScale = fontScale,
+            compactLandscape = compactLandscape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(stripHeight),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(panelHeight),
+        ) {
+            when (state.page) {
+                KeyboardPage.Letters -> LettersPanel(
+                    state = state,
+                    onAction = onAction,
+                    fontScale = fontScale,
+                    compactLandscape = compactLandscape,
+                    keyShape = keyShape,
+                    rowGap = rowGap,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                KeyboardPage.Numbers -> NumbersPanel(
+                    onAction = onAction,
+                    fontScale = fontScale,
+                    compactLandscape = compactLandscape,
+                    keyShape = keyShape,
+                    rowGap = rowGap,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                KeyboardPage.Symbols -> SymbolsPanel(
+                    onAction = onAction,
+                    fontScale = fontScale,
+                    compactLandscape = compactLandscape,
+                    keyShape = keyShape,
+                    rowGap = rowGap,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        BottomBar(
+            state = state,
+            onAction = onAction,
+            fontScale = fontScale,
+            compactLandscape = compactLandscape,
+            keyShape = keyShape,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(bottomHeight),
+        )
+    }
+}
+
+@Composable
+private fun InfoStrip(
+    fontScale: Float,
+    compactLandscape: Boolean,
+    modifier: Modifier,
+) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(if (compactLandscape) 6.dp else 8.dp)
+
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(colors.surfaceVariant.copy(alpha = 0.48f))
+            .padding(horizontal = if (compactLandscape) 8.dp else 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "絮雨 · English",
+            color = colors.onSurfaceVariant,
+            fontSize = adaptiveSp(12f, fontScale, 15f),
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+        )
+    }
+}
+
+private fun adaptiveSp(base: Float, fontScale: Float, maximum: Float): TextUnit =
+    (base.times(fontScale).coerceIn(base * 0.85f, maximum) / fontScale.coerceAtLeast(0.1f)).sp
+
+@Composable
+private fun LettersPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit, fontScale: Float,
+    compactLandscape: Boolean, keyShape: Shape, rowGap: Dp, modifier: Modifier) {
+    BoxWithConstraints(modifier) {
+        val cell = maxWidth / 10
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(rowGap)) {
+            CharacterRow(LETTER_ROW_ONE, state.uppercase, onAction, fontScale, keyShape,
+                Modifier.fillMaxWidth().weight(1f))
+            CharacterRow(LETTER_ROW_TWO, state.uppercase, onAction, fontScale, keyShape,
+                Modifier.fillMaxWidth().weight(1f).padding(horizontal = cell / 2))
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                KeyFace("Shift", "切换大小写，长按锁定大写", fontScale, keyShape, Modifier.weight(1.5f).fillMaxHeight(),
+                    active = state.uppercase, onClick = { onAction(KeyboardAction.Shift) },
+                    onLongClick = { onAction(KeyboardAction.CapsLock) }, icon = "shift", locked = state.capsLock)
+                LETTER_ROW_THREE.forEach { letter ->
+                    val text = if (state.uppercase) letter.uppercase() else letter
+                    KeyFace(text, text, fontScale, keyShape, Modifier.weight(1f).fillMaxHeight(),
+                        onClick = { onAction(KeyboardAction.Text(text)) })
+                }
+                DeleteKey(onAction, fontScale, keyShape, Modifier.weight(1.5f).fillMaxHeight())
+            }
+        }
+    }
+}
+
+@Composable
+private fun CharacterRow(characters: List<String>, uppercase: Boolean, onAction: (KeyboardAction) -> Unit,
+    fontScale: Float, keyShape: Shape, modifier: Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        characters.forEach { value ->
+            val text = if (uppercase) value.uppercase() else value
+            KeyFace(text, text, fontScale, keyShape, Modifier.weight(1f).fillMaxHeight(),
+                onClick = { onAction(KeyboardAction.Text(text)) })
+        }
+    }
+}
+
+@Composable
+private fun NumbersPanel(onAction: (KeyboardAction) -> Unit, fontScale: Float, compactLandscape: Boolean,
+    keyShape: Shape, rowGap: Dp, modifier: Modifier) {
+    AuxiliaryPanel(NUMBER_ROW_ONE, NUMBER_ROW_TWO, NUMBER_ROW_THREE, onAction, fontScale, keyShape, rowGap,
+        modifier, KeyboardAction.ToggleNumbers)
+}
+
+@Composable
+private fun SymbolsPanel(onAction: (KeyboardAction) -> Unit, fontScale: Float, compactLandscape: Boolean,
+    keyShape: Shape, rowGap: Dp, modifier: Modifier) {
+    AuxiliaryPanel(SYMBOL_ROW_ONE, SYMBOL_ROW_TWO, SYMBOL_ROW_THREE, onAction, fontScale, keyShape, rowGap,
+        modifier, KeyboardAction.ToggleSymbols)
+}
+
+@Composable
+private fun AuxiliaryPanel(first: List<String>, second: List<String>, third: List<String>,
+    onAction: (KeyboardAction) -> Unit, fontScale: Float, shape: Shape, gap: Dp, modifier: Modifier,
+    returnAction: KeyboardAction) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
+        CharacterRow(first, false, onAction, fontScale, shape, Modifier.fillMaxWidth().weight(1f))
+        CharacterRow(second, false, onAction, fontScale, shape, Modifier.fillMaxWidth().weight(1f))
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            KeyFace("ABC", "返回字母键盘", fontScale, shape, Modifier.weight(1.5f).fillMaxHeight(),
+                onClick = { onAction(returnAction) })
+            third.forEach { text ->
+                KeyFace(text, text, fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
+                    onClick = { onAction(KeyboardAction.Text(text)) })
+            }
+            DeleteKey(onAction, fontScale, shape, Modifier.weight(1.5f).fillMaxHeight())
+        }
+    }
+}
+
+@Composable
+private fun BottomBar(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit, fontScale: Float,
+    compactLandscape: Boolean, keyShape: Shape, modifier: Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        KeyFace("！﹫#", "符号键盘", fontScale, keyShape, Modifier.weight(1.15f).fillMaxHeight(),
+            active = state.page == KeyboardPage.Symbols, small = true, onClick = { onAction(KeyboardAction.ToggleSymbols) })
+        KeyFace("123", "数字键盘", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
+            active = state.page == KeyboardPage.Numbers, small = true, onClick = { onAction(KeyboardAction.ToggleNumbers) })
+        KeyFace("，", "逗号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
+            onClick = { onAction(KeyboardAction.Text("，")) })
+        KeyFace("空格", "空格", fontScale, keyShape, Modifier.weight(3.10f).fillMaxHeight(), small = true,
+            onClick = { onAction(KeyboardAction.Space) })
+        KeyFace("。", "句号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
+            onClick = { onAction(KeyboardAction.Text("。")) })
+        KeyFace("", "切换语言，长按切换输入法", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
+            onClick = { onAction(KeyboardAction.NextLanguage) }, onLongClick = { onAction(KeyboardAction.PickInputMethod) }, icon = "globe")
+        KeyFace(state.actionLabel, "回车：${state.actionLabel}", fontScale, keyShape, Modifier.weight(1.45f).fillMaxHeight(),
+            active = true, small = true, onClick = { onAction(KeyboardAction.Enter) })
+    }
+}
+
+@Composable
+private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shape: Shape, modifier: Modifier) {
+    KeyFace("", "删除，长按连续删除", fontScale, shape, modifier,
+        onClick = { onAction(KeyboardAction.Backspace) }, repeat = true, icon = "delete")
+}
+
+@Composable
+private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
+    modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false,
+    onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
+    val colors = MaterialTheme.colorScheme
+    val view = LocalView.current
+    val configuration = LocalViewConfiguration.current
+    val click by rememberUpdatedState(onClick)
+    val longClick by rememberUpdatedState(onLongClick)
+    var pressed by remember { mutableStateOf(false) }
+    val background = when {
+        pressed -> colors.primary.copy(alpha = 0.24f)
+        active -> colors.primaryContainer
+        small || icon != null -> colors.surfaceVariant
+        else -> if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White
+    }
+    val foreground = if (active) colors.onPrimaryContainer else colors.onSurface
+    val gesture = if (repeat) {
+        Modifier.pointerInput(configuration.longPressTimeoutMillis) {
+            coroutineScope {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    pressed = true
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    click()
+                    val repetition = launch {
+                        delay(configuration.longPressTimeoutMillis)
+                        while (isActive) { click(); delay(BACKSPACE_REPEAT_DELAY_MILLIS) }
+                    }
+                    try {
+                        waitForUpOrCancellation()?.consume()
+                    } finally {
+                        repetition.cancel()
+                        pressed = false
+                    }
+                }
+            }
+        }
+    } else {
+        Modifier.pointerInput(onLongClick != null) {
+            androidx.compose.foundation.gestures.detectTapGestures(
+                onPress = { pressed = true; try { tryAwaitRelease() } finally { pressed = false } },
+                onTap = { view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); click() },
+                onLongPress = if (onLongClick == null) null else { _ ->
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    longClick?.invoke()
+                },
+            )
+        }
+    }
+    Box(modifier.clip(shape).background(background).border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
+        .semantics(mergeDescendants = true) {
+            role = Role.Button
+            contentDescription = description
+            onClick { click(); true }
+            if (onLongClick != null) {
+                this.onLongClick(label = "长按") { longClick?.invoke(); true }
+            }
+        }.then(gesture), contentAlignment = Alignment.Center) {
+        if (icon != null) {
+            KeyIcon(icon, foreground, locked, Modifier.size(22.dp))
+        } else {
+            Text(label, color = foreground,
+                fontSize = adaptiveSp(if (small) 12f else 21f, fontScale, if (small) 14f else 25f),
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Clip)
+        }
+    }
+}
+
+@Composable
+private fun KeyIcon(type: String, color: Color, locked: Boolean, modifier: Modifier) {
+    Canvas(modifier) {
+        val unit = size.minDimension / 24f
+        fun p(x: Float, y: Float) = Offset(x * unit, y * unit)
+        val stroke = Stroke(1.6f * unit, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        when (type) {
+            "globe" -> {
+                drawCircle(color, 9f * unit, center = p(12f, 12f), style = stroke)
+                drawOval(color, p(7f, 3f), androidx.compose.ui.geometry.Size(10f * unit, 18f * unit), style = stroke)
+                drawLine(color, p(3f, 12f), p(21f, 12f), strokeWidth = stroke.width)
+                drawLine(color, p(5f, 7f), p(19f, 7f), strokeWidth = stroke.width)
+                drawLine(color, p(5f, 17f), p(19f, 17f), strokeWidth = stroke.width)
+            }
+            "delete" -> {
+                val path = Path().apply {
+                    moveTo(3f * unit, 12f * unit); lineTo(8f * unit, 6f * unit)
+                    lineTo(21f * unit, 6f * unit); lineTo(21f * unit, 18f * unit)
+                    lineTo(8f * unit, 18f * unit); close()
+                }
+                drawPath(path, color, style = stroke)
+                drawLine(color, p(12f, 9f), p(17f, 15f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(color, p(17f, 9f), p(12f, 15f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            "shift" -> {
+                val path = Path().apply {
+                    moveTo(12f * unit, 3f * unit); lineTo(21f * unit, 12f * unit)
+                    lineTo(16f * unit, 12f * unit); lineTo(16f * unit, 19f * unit)
+                    lineTo(8f * unit, 19f * unit); lineTo(8f * unit, 12f * unit)
+                    lineTo(3f * unit, 12f * unit); close()
+                }
+                drawPath(path, color, style = stroke)
+                if (locked) drawLine(color, p(8f, 22f), p(16f, 22f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+        }
+    }
+}
