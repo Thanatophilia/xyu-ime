@@ -222,7 +222,12 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     private fun updateAutoCaps() {
         val info = currentInputEditorInfo ?: return
         val flags = EditorPolicy.autoCapsFlags(info.inputType)
-        caseState.automaticUppercase = flags != 0 && (currentInputConnection?.getCursorCapsMode(flags) ?: 0) != 0
+        val connection = currentInputConnection
+        val editorCaps = flags != 0 && (connection?.getCursorCapsMode(flags) ?: 0) != 0
+        val sentenceCaps = flags != 0 &&
+            (info.inputType and InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) != 0 &&
+            EditorPolicy.sentenceNeedsCaps(connection?.getTextBeforeCursor(256, 0))
+        caseState.automaticUppercase = editorCaps || sentenceCaps
         syncCaseState()
     }
 

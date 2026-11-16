@@ -129,6 +129,26 @@ internal object EditorPolicy {
         }
     }
 
+    /**
+     * Detects a sentence start from the text immediately before the cursor.
+     * This supplements getCursorCapsMode(), which is inconsistent after punctuation
+     * in some editors and Compose text fields.
+     */
+    fun sentenceNeedsCaps(textBeforeCursor: CharSequence?): Boolean {
+        val text = textBeforeCursor?.toString().orEmpty()
+        if (text.isEmpty()) return true
+        var index = text.lastIndex
+        while (index >= 0 && text[index].isWhitespace()) index--
+        while (index >= 0 && text[index] in CLOSING_DELIMITERS) {
+            index--
+            while (index >= 0 && text[index].isWhitespace()) index--
+        }
+        return index < 0 || text[index] in SENTENCE_TERMINATORS || text[index] == '\n' || text[index] == '\r'
+    }
+
+    private const val SENTENCE_TERMINATORS = ".。!?！？"
+    private const val CLOSING_DELIMITERS = "\\\"'”’)]}》」』〕】"
+
     /** Returns only explicit text capitalization flags applicable to this editor. */
     fun autoCapsFlags(inputType: Int): Int {
         if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return 0
