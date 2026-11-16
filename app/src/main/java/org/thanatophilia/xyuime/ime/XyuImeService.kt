@@ -19,6 +19,9 @@ import android.inputmethodservice.InputMethodService
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.runtime.key
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.rememberCompositionContext
+import org.thanatophilia.xyuime.ui.FloatingPreeditWindow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -51,6 +54,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     private var keyboardState by mutableStateOf(KeyboardUiState())
     private var composeView: ComposeView? = null
+    private val floatingPreedit by lazy { FloatingPreeditWindow(this, this, this, this) }
     private var toast: Toast? = null
     private var inputViewActive by mutableStateOf(false)
     private var inputSession by mutableStateOf(0)
@@ -76,6 +80,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     private val chinese: Boolean get() = chinesePreferred && chineseAllowed && engineReady
 
     private fun resetChinese(clearActions: Boolean = true) {
+        floatingPreedit.update("", false)
         chineseSession.invalidate()
         if (clearActions) actions.clear()
         expectedEditorSelections.clear()
@@ -214,6 +219,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     override fun onCreateInputView(): View {
         installWindowOwners()
+        floatingPreedit.dispose()
         composeView?.disposeComposition()
         val view = ComposeView(this).apply {
             // The framework owns window positioning. Compose consumes remaining system
@@ -226,13 +232,22 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             setViewTreeSavedStateRegistryOwner(this@XyuImeService)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
+                // The floating window shares this composition context, but is not a layout child.
+                val parent = rememberCompositionContext()
+                val code = keyboardState.preedit
+                val showCode = inputViewActive && keyboardState.chinese && !keyboardState.sensitive
+                SideEffect {
+                    floatingPreedit.setParentComposition(parent)
+                    floatingPreedit.update(code, showCode)
+                }
                 key(inputViewActive, inputSession) {
                     XyuKeyboard(state = keyboardState, onAction = { action ->
                         if (inputViewActive) handleAction(action)
-                    })
+                    }, onKeyboardBounds = floatingPreedit::setKeyboardBounds)
                 }
             }
         }
+        floatingPreedit.bind(view)
         composeView = view
         return view
     }
@@ -620,6 +635,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         toast?.cancel()
         pauseViewLifecycle()
         rime.close()
+        floatingPreedit.dispose()
         composeView?.disposeComposition()
         composeView = null
         registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)

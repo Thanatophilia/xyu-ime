@@ -2,9 +2,13 @@ package org.thanatophilia.xyuime
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Build
+import android.os.Environment
 import android.os.SystemClock
 import android.text.InputType
+import android.view.MotionEvent
+import android.view.WindowInsets
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -18,6 +22,9 @@ import androidx.test.uiautomator.Until
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
+import kotlin.math.abs
+import kotlin.math.ceil
 
 /** Real IME tests. The editor/action recorder exists only in the instrumentation APK. */
 @RunWith(AndroidJUnit4::class)
@@ -220,6 +227,240 @@ class ImePhase3InputRegressionTest {
             it.text == "shi" && it.composing == null && it.actions.isEmpty()
         }
         noCandidates()
+    }
+
+    /** All coordinates come from the app's real view/window, on its UI thread. */
+    private data class EditorGeometry(
+        val bounds: Rect,
+        val visibleFrame: Rect,
+        val imeBottom: Int,
+        val imeVisible: Boolean,
+        val editorFocused: Boolean,
+        val windowFocused: Boolean,
+    )
+
+    private fun editorGeometry(): EditorGeometry {
+        check(Build.VERSION.SDK_INT >= 30) { "Floating-window regressions require API 30+ (CI: 36)" }
+        var result: EditorGeometry? = null
+        instrumentation.runOnMainSync {
+            val position = IntArray(2)
+            field.getLocationOnScreen(position)
+            val frame = Rect()
+            field.getWindowVisibleDisplayFrame(frame)
+            // Do not infer this from keyboard height: a popup must not enlarge the IME inset.
+            val insets = requireNotNull(field.rootWindowInsets) { "Editor has no rootWindowInsets" }
+            result = EditorGeometry(
+                Rect(position[0], position[1], position[0] + field.width, position[1] + field.height),
+                frame, insets.getInsets(WindowInsets.Type.ime()).bottom,
+                insets.isVisible(WindowInsets.Type.ime()), field.hasFocus(), field.hasWindowFocus(),
+            )
+        }
+        return requireNotNull(result)
+    }
+
+    private fun settledEditorGeometry(imeVisible: Boolean = true): EditorGeometry {
+        val deadline = SystemClock.uptimeMillis() + 8_000
+        var previous: EditorGeometry? = null
+        var stableSince = SystemClock.uptimeMillis()
+        do {
+            val current = editorGeometry()
+            val now = SystemClock.uptimeMillis()
+            if (current != previous) stableSince = now
+            val ready = current.imeVisible == imeVisible &&
+                (if (imeVisible) current.imeBottom > 0 else current.imeBottom == 0) &&
+                current.editorFocused && current.windowFocused
+            if (ready && now - stableSince >= 300) return current
+            previous = current
+            SystemClock.sleep(50)
+        } while (SystemClock.uptimeMillis() < deadline)
+        error("Editor/IME geometry did not settle (visible=$imeVisible): $previous")
+    }
+
+    private fun noFloatingPreedit() {
+        assertTrue("Floating preedit must disappear",
+            device.waitForFreshGone(By.res("floating_preedit").pkg(pkg), 5_000))
+    }
+
+    private fun assertFloatingPreedit(code: String): Rect {
+        val surface = node("keyboard_surface").visibleBounds
+        val popupNode = node("floating_preedit")
+        val popup = popupNode.visibleBounds
+        // The tag can describe Text inside the bubble's 10dp horizontal content padding.
+        val insetTolerance = ceil(12 * context.resources.displayMetrics.density).toInt()
+        assertFalse("Popup must expose nonempty screen bounds: $popup", popup.isEmpty)
+        assertTrue("Popup must be above the keyboard: popup=$popup, surface=$surface",
+            popup.bottom <= surface.top)
+        assertTrue("Popup must align to the physical left: popup=$popup, surface=$surface",
+            popup.left >= surface.left - 1 && popup.left <= surface.left + insetTolerance)
+        assertTrue("Popup must fit the keyboard width: popup=$popup, surface=$surface",
+            popup.right <= surface.right + 1)
+        assertTrue("Popup must remain on screen: $popup", popup.top >= 0)
+        // Text may be on the tagged container or a descendant of that Compose node.
+        val texts = listOfNotNull(popupNode.text) +
+            popupNode.findObjects(By.text(java.util.regex.Pattern.compile(".+"))).mapNotNull { it.text }
+        assertTrue("Popup must expose the current code '$code'; actual=$texts",
+            texts.any { it.replace(" ", "") == code.replace(" ", "") })
+        var ancestor: UiObject2? = popupNode.parent
+        while (ancestor != null) {
+            assertNotEquals("Popup must not be a candidate-strip descendant",
+                "candidate_strip", ancestor.resourceName)
+            ancestor = ancestor.parent
+        }
+        val strip = node("candidate_strip")
+        assertFalse("Candidate strip must not contain the floating code",
+            strip.hasObject(By.res("floating_preedit")))
+        assertFalse("Candidate strip must contain candidates/toggle, not an inline preedit",
+            strip.hasObject(By.desc("拼音预编辑")))
+        assertTrue("Candidate row must still contain a selectable candidate", strip.hasObject(By.res("candidate:0")))
+        assertTrue("Candidate row must still contain its toggle", strip.hasObject(By.res("candidate_toggle")))
+        return Rect(popup)
+    }
+
+    private fun floatingScreenshot(name: String) {
+        val directory = requireNotNull(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES))
+        assertTrue("Screenshot directory must exist", directory.isDirectory || directory.mkdirs())
+        freshTree()
+        val hierarchy = File(directory, "$name.xml")
+        val screenshot = File(directory, "$name.png")
+        device.dumpWindowHierarchy(hierarchy)
+        assertTrue("Screenshot must be saved: $name.png", device.takeScreenshot(screenshot))
+        // Existing emulator-smoke.sh pulls this directory, including successful tests.
+        val review = "/sdcard/Download/xyu-ime-review"
+        val copied = device.executeShellCommand(
+            "mkdir -p '$review' && cp '${hierarchy.absolutePath}' '${screenshot.absolutePath}' '$review/' && echo copied")
+        assertEquals("CI review artifacts must be copied", "copied", copied.trim())
+    }
+
+    @Test fun floatingPreeditStaysAboveKeyboardWithoutResizingAppOrKeys() = withChineseEditor {
+        node("keyboard_surface")
+        noFloatingPreedit()
+        val editorBefore = settledEditorGeometry()
+        val surfaceBefore = Rect(node("keyboard_surface").visibleBounds)
+        val qBefore = Rect(node("key:q").visibleBounds)
+        val spaceBefore = Rect(node("key:空格").visibleBounds)
+        floatingScreenshot("phase3-floating-preedit-before")
+        typeLetters("n")
+        awaitSnapshot("n must start a real composition") { it.composing?.replace(" ", "") == "n" }
+        assertFloatingPreedit("n")
+        val stripBefore = Rect(node("candidate_strip").visibleBounds)
+        typeLetters("ihao")
+        val composing = awaitSnapshot("nihao must be composing") {
+            it.composing?.replace(" ", "") == "nihao" && it.actions.isEmpty()
+        }
+        assertFloatingPreedit("nihao")
+        floatingScreenshot("phase3-floating-preedit")
+        assertEquals("Popup must not change editor bounds, visible frame, IME inset or focus",
+            editorBefore, settledEditorGeometry())
+        assertEquals("Keyboard surface must not move or resize", surfaceBefore, node("keyboard_surface").visibleBounds)
+        assertEquals("Letter key must not move or shrink", qBefore, node("key:q").visibleBounds)
+        assertEquals("Space key must not move or shrink", spaceBefore, node("key:空格").visibleBounds)
+        assertEquals("Candidate row must not move or grow with code", stripBefore, node("candidate_strip").visibleBounds)
+        tap("candidate_toggle")
+        node("candidate_drawer")
+        assertFloatingPreedit("nihao")
+        floatingScreenshot("phase3-floating-preedit-drawer")
+        assertEquals("Opening drawer must preserve the composition", composing, snapshot())
+        assertEquals("Drawer must preserve editor/window geometry", editorBefore, settledEditorGeometry())
+        assertEquals("Drawer must preserve keyboard bounds", surfaceBefore, node("keyboard_surface").visibleBounds)
+        assertEquals("Drawer must preserve candidate-row bounds", stripBefore, node("candidate_strip").visibleBounds)
+        tap("candidate_toggle")
+        node("key:q")
+        assertEquals("Closing drawer must restore letter bounds", qBefore, node("key:q").visibleBounds)
+        assertEquals("Closing drawer must restore space bounds", spaceBefore, node("key:空格").visibleBounds)
+    }
+
+    @Test fun floatingPreeditDisappearsAfterRawEnterAndCandidateSelection() = withChineseEditor {
+        val editorBefore = settledEditorGeometry()
+        typeLetters("nihao")
+        awaitSnapshot("nihao must be composing before raw Enter") {
+            it.composing?.replace(" ", "") == "nihao" && it.actions.isEmpty()
+        }
+        assertFloatingPreedit("nihao")
+        enter("完成")
+        awaitSnapshot("Raw Enter must commit code without performing the editor action") {
+            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        }
+        noFloatingPreedit()
+        noCandidates()
+        node("key:q")
+        assertEquals("Raw commit must leave editor/window geometry unchanged", editorBefore, settledEditorGeometry())
+        floatingScreenshot("phase3-floating-preedit-after-enter")
+        typeLetters("nihao")
+        awaitSnapshot("Second composition must be visible") { it.composing?.replace(" ", "") == "nihao" }
+        assertFloatingPreedit("nihao")
+        val candidate = requireNotNull(node("candidate:0").text) { "Candidate must expose its commit text" }
+        assertTrue("Candidate must not be empty", candidate.isNotBlank())
+        tap("candidate:0")
+        awaitSnapshot("Selection must commit the displayed candidate, preserving prior raw text") {
+            it.text == "nihao$candidate" && it.composing == null && it.actions.isEmpty()
+        }
+        noFloatingPreedit()
+        noCandidates()
+        node("key:q")
+        assertEquals("Candidate commit must leave editor/window geometry unchanged", editorBefore, settledEditorGeometry())
+    }
+
+    @Test fun floatingPreeditDoesNotConsumeFirstBack() = withChineseEditor {
+        settledEditorGeometry()
+        typeLetters("nihao")
+        val before = awaitSnapshot("nihao must be composing before Back") {
+            it.composing?.replace(" ", "") == "nihao" && it.actions.isEmpty()
+        }
+        assertFloatingPreedit("nihao")
+        assertTrue("Back must be injected", device.pressBack()) // Exactly one Back, never a retry.
+        assertTrue("First Back must close the IME, not just its nonfocusable popup",
+            device.waitForFreshGone(By.res("keyboard_surface").pkg(pkg), 8_000))
+        noFloatingPreedit()
+        val hidden = settledEditorGeometry(imeVisible = false)
+        assertEquals("Hidden IME must report zero actual inset", 0, hidden.imeBottom)
+        val after = snapshot()
+        assertEquals("Back must not change editor text", before.text, after.text)
+        assertTrue("Back must not invoke an editor action", after.actions.isEmpty())
+    }
+
+    @Test fun floatingPreeditPassesTouchesToTheEditorUnderneath() = withChineseEditor {
+        val editorBefore = settledEditorGeometry()
+        typeLetters("nihao")
+        val before = awaitSnapshot("nihao must be composing before passthrough tap") {
+            it.composing?.replace(" ", "") == "nihao" && it.actions.isEmpty()
+        }
+        val popup = assertFloatingPreedit("nihao")
+        val x = popup.centerX()
+        val y = popup.centerY()
+        assertTrue("Synthetic editor must actually lie beneath popup center: editor=$editorBefore, popup=$popup",
+            editorBefore.bounds.contains(x, y) && editorBefore.visibleFrame.contains(x, y))
+        // This records real window-dispatched events. Consuming them protects the composing
+        // span/caret from EditText's ordinary click behaviour, so passthrough is isolated.
+        val events = mutableListOf<Triple<Int, Float, Float>>() // UI-thread access only.
+        var selectionBefore = 0 to 0
+        instrumentation.runOnMainSync {
+            selectionBefore = field.selectionStart to field.selectionEnd
+            field.setOnTouchListener { _, event ->
+                events.add(Triple(event.actionMasked, event.rawX, event.rawY))
+                true
+            }
+        }
+        try {
+            assertTrue("Popup-center tap must be injected", device.click(x, y))
+            device.waitForIdle()
+            instrumentation.waitForIdleSync()
+            var received: List<Triple<Int, Float, Float>> = emptyList()
+            var selectionAfter = 0 to 0
+            instrumentation.runOnMainSync {
+                received = events.toList()
+                selectionAfter = field.selectionStart to field.selectionEnd
+            }
+            assertEquals("Editor beneath popup must receive a complete tap", listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP),
+                received.filter { it.first != MotionEvent.ACTION_MOVE }.map { it.first })
+            assertTrue("Received touch coordinates must be the popup center: $received",
+                received.all { abs(it.second - x) <= 2f && abs(it.third - y) <= 2f })
+            assertEquals("Consumed tap must not move the caret", selectionBefore, selectionAfter)
+            assertEquals("Passthrough tap must not commit/change composition or invoke an action", before, snapshot())
+            assertFloatingPreedit("nihao")
+            assertEquals("Passthrough tap must preserve editor/window geometry", editorBefore, settledEditorGeometry())
+        } finally {
+            instrumentation.runOnMainSync { field.setOnTouchListener(null) }
+        }
     }
 
     @Test fun candidateStripDoesNotResizeLetterKeys() = withChineseEditor {

@@ -47,6 +47,9 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -217,6 +220,7 @@ fun XyuKeyboard(
     state: KeyboardUiState,
     onAction: (KeyboardAction) -> Unit,
     modifier: Modifier = Modifier,
+    onKeyboardBounds: (android.graphics.Rect) -> Unit = {},
 ) {
     val configuration = LocalConfiguration.current
     val compactLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -253,7 +257,16 @@ fun XyuKeyboard(
                 keyboardHeight = keyboardHeight,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(keyboardHeight),
+                    .height(keyboardHeight)
+                    .onGloballyPositioned { coordinates ->
+                        val bounds = coordinates.boundsInWindow()
+                        onKeyboardBounds(android.graphics.Rect(bounds.left.roundToInt(),
+                            bounds.top.roundToInt(), bounds.right.roundToInt(), bounds.bottom.roundToInt()))
+                    }
+                    .semantics {
+                        testTagsAsResourceId = true
+                        testTag = "keyboard_surface"
+                    },
             )
         }
     }
@@ -377,11 +390,11 @@ private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) ->
                     action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
             }
     }
-    Column(modifier) {
-        Text(state.preedit, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.primary, fontSize = 12.sp,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "拼音预编辑" })
-        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
+    // Only candidates live here. Code/preedit is drawn in an IME-owned floating window.
+    Row(modifier.semantics {
+        testTagsAsResourceId = true
+        testTag = "candidate_strip"
+    }, verticalAlignment = Alignment.CenterVertically) {
             LazyRow(Modifier.weight(1f).fillMaxHeight(), state = scroll,
                 verticalAlignment = Alignment.CenterVertically) {
                 itemsIndexed(state.candidates, key = { index, _ -> index }) { index, candidate ->
@@ -399,7 +412,6 @@ private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) ->
                 Text(if (state.candidatesExpanded) "⌃" else "⌄", fontSize = 24.sp,
                     color = MaterialTheme.colorScheme.primary)
             }
-        }
     }
 }
 
