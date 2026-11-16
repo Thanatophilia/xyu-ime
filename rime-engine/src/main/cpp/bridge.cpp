@@ -9,11 +9,11 @@
 #include <stdexcept>
 
 // Always release librime-owned buffers, including when UTF conversion/allocation throws.
-template<class T> struct RimeResource {
+template<class T, class F> struct RimeResource {
     T value{};
-    void (*release)(T*);
+    F release;
     bool active = false;
-    explicit RimeResource(void (*fn)(T*)) : release(fn) {}
+    explicit RimeResource(F fn) : release(fn) {}
     ~RimeResource() { if (active) release(&value); }
 };
 
@@ -23,11 +23,13 @@ RimeApi* api = rime_get_api();
 bool ready = false;
 std::string shared, user, logs;
 std::string utf8(JNIEnv* env, jstring s) {
-    if (!s) return {};
-    const jchar* p = env->GetStringChars(s, nullptr);
-    if (!p) return {};
-    std::u16string value(reinterpret_cast<const char16_t*>(p), env->GetStringLength(s));
-    env->ReleaseStringChars(s, p);
+    if (!s) throw std::invalid_argument("null path");
+    const auto length = env->GetStringLength(s);
+    std::u16string value(static_cast<size_t>(length), u'\0');
+    env->GetStringRegion(s, 0, length, reinterpret_cast<jchar*>(value.data()));
+    if (env->ExceptionCheck()) throw std::runtime_error("JNI string allocation");
+    if (value.empty() || value.find(u'\0') != std::u16string::npos)
+        throw std::invalid_argument("invalid path");
     return std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.to_bytes(value);
 }
 jstring javaString(JNIEnv* env, const std::string& s) {
@@ -35,23 +37,54 @@ jstring javaString(JNIEnv* env, const std::string& s) {
     return env->NewString(reinterpret_cast<const jchar*>(value.data()), value.size());
 }
 void fail(JNIEnv* env) {
-    env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), "Native engine operation failed");
+    if (env->ExceptionCheck()) return;
+    auto type = env->FindClass("java/lang/IllegalStateException");
+    if (type) { env->ThrowNew(type, "Native engine operation failed"); env->DeleteLocalRef(type); }
 }
 }
 #define JNI(name) Java_org_thanatophilia_xyuime_rime_NativeRime_##name
 extern "C" JNIEXPORT jboolean JNICALL JNI(initialize)(JNIEnv* env, jobject, jstring s, jstring u, jstring l) {
     std::lock_guard<std::mutex> lock(mutex);
     try {
-        if (ready) return true;
-        shared = utf8(env, s); user = utf8(env, u); logs = utf8(env, l);
+        const auto nextShared = utf8(env, s), nextUser = utf8(env, u), nextLogs = utf8(env, l);
+        if (ready) {
+            if (shared != nextShared || user != nextUser || logs != nextLogs)
+                throw std::invalid_argument("engine already initialized with other paths");
+            return true;
+        }
+        shared = nextShared; user = nextUser; logs = nextLogs;
         RIME_STRUCT(RimeTraits, traits);
         traits.shared_data_dir = shared.c_str(); traits.user_data_dir = user.c_str();
         traits.log_dir = logs.c_str(); traits.app_name = "rime.xyu";
         traits.distribution_name = "Xyu"; traits.distribution_code_name = "xyu";
         traits.distribution_version = "0.3"; traits.min_log_level = 3;
-        api->setup(&traits); api->initialize(&traits); ready = true;
-        if (api->start_maintenance(true)) api->join_maintenance_thread();
-        return true;
+        api->setup(&traits);
+        try {
+            api->initialize(&traits);
+            // deploy() is synchronous and reports failure; joining maintenance alone does not.
+            api->deployer_initialize(&traits);
+            if (!api->deploy()) throw std::runtime_error("deployment failed");
+            auto probe = api->create_session();
+            bool usable = probe && api->select_schema(probe, "xyu_pinyin");
+            if (usable) {
+                // select_schema accepts even a nonexistent schema in 1.17.0.
+                // Check the actual translator without committing or learning probe input.
+                for (const char key : std::string("nihao")) api->process_key(probe, key, 0);
+                RimeCandidateListIterator it{};
+                usable = api->candidate_list_begin(probe, &it);
+                if (usable) {
+                    usable = api->candidate_list_next(&it);
+                    api->candidate_list_end(&it);
+                }
+            }
+            if (probe) api->destroy_session(probe);
+            if (!usable) throw std::runtime_error("schema unavailable");
+            ready = true;
+            return true;
+        } catch (...) {
+            api->finalize();
+            throw;
+        }
     } catch (...) { fail(env); return false; }
 }
 extern "C" JNIEXPORT jlong JNICALL JNI(createSession)(JNIEnv* env, jobject) {
@@ -71,38 +104,51 @@ extern "C" JNIEXPORT jobjectArray JNICALL JNI(step)(JNIEnv* env, jobject, jlong 
     try {
         auto id = static_cast<RimeSessionId>(handle);
         if (!ready || !api->find_session(id)) { fail(env); return nullptr; }
+        if (op < 0 || op > 4) throw std::invalid_argument("unknown operation");
         bool consumed = false;
         if (op == 1) consumed = api->process_key(id, key, 0);
         if (op == 2 && key >= 0) consumed = api->select_candidate(id, key);
         if (op == 3) { api->clear_composition(id); consumed = true; }
         if (op == 4) consumed = api->commit_composition(id);
         std::vector<std::string> data{consumed ? "1" : "0", "", "", "0", "0", "0", "1"};
-        RIME_STRUCT(RimeCommit, commit);
-        if (api->get_commit(id, &commit)) {
-            data[1] = commit.text ? commit.text : ""; api->free_commit(&commit);
+        RimeResource<RimeCommit, decltype(api->free_commit)> commitOwner(api->free_commit);
+        auto& commit = commitOwner.value;
+        RIME_STRUCT_INIT(RimeCommit, commit);
+        if ((commitOwner.active = api->get_commit(id, &commit))) {
+            data[1] = commit.text ? commit.text : "";
         }
-        RIME_STRUCT(RimeContext, ctx);
-        if (api->get_context(id, &ctx)) {
+        RimeResource<RimeContext, decltype(api->free_context)> contextOwner(api->free_context);
+        auto& ctx = contextOwner.value;
+        RIME_STRUCT_INIT(RimeContext, ctx);
+        if ((contextOwner.active = api->get_context(id, &ctx))) {
             data[2] = ctx.composition.preedit ? ctx.composition.preedit : "";
             // Rime cursor is a UTF-8 byte offset; Kotlin needs UTF-16 code units.
             auto prefix = data[2].substr(0, static_cast<size_t>(ctx.composition.cursor_pos));
             data[3] = std::to_string(std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(prefix).size());
             data[4] = std::to_string(ctx.menu.page_no * ctx.menu.page_size + ctx.menu.highlighted_candidate_index);
             data[5] = std::to_string(ctx.menu.page_no);
-            api->free_context(&ctx);
         }
-        RimeCandidateListIterator it{};
-        if (api->candidate_list_begin(id, &it)) {
+        RimeResource<RimeCandidateListIterator, decltype(api->candidate_list_end)> iteratorOwner(api->candidate_list_end);
+        auto& it = iteratorOwner.value;
+        limit = std::clamp(limit, 1, 4096);
+        if ((iteratorOwner.active = api->candidate_list_begin(id, &it))) {
             int count = 0;
             while (api->candidate_list_next(&it)) {
                 if (count++ >= limit) { data[6] = "0"; break; }
                 data.emplace_back(it.candidate.text ? it.candidate.text : "");
             }
-            api->candidate_list_end(&it);
         }
-        auto array = env->NewObjectArray(data.size(), env->FindClass("java/lang/String"), nullptr);
+        auto stringClass = env->FindClass("java/lang/String");
+        if (!stringClass) return nullptr;
+        auto array = env->NewObjectArray(static_cast<jsize>(data.size()), stringClass, nullptr);
+        env->DeleteLocalRef(stringClass);
+        if (!array) return nullptr;
         for (size_t i = 0; i < data.size(); ++i) {
-            auto value = javaString(env, data[i]); env->SetObjectArrayElement(array, i, value); env->DeleteLocalRef(value);
+            auto value = javaString(env, data[i]);
+            if (!value) return nullptr;
+            env->SetObjectArrayElement(array, static_cast<jsize>(i), value);
+            env->DeleteLocalRef(value);
+            if (env->ExceptionCheck()) return nullptr;
         }
         return array;
     } catch (...) { fail(env); return nullptr; }

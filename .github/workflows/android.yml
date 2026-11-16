@@ -64,7 +64,9 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: bash scripts/emulator-smoke.sh
+          script: |
+            ./gradlew --no-daemon --stacktrace :rime-engine:connectedDebugAndroidTest
+            bash scripts/emulator-smoke.sh
       - name: Summarize emulator check
         if: always()
         run: |
@@ -110,6 +112,8 @@ jobs:
             app/build/reports/
             app/build/test-results/
             app/build/outputs/androidTest-results/
+            rime-engine/build/reports/
+            rime-engine/build/outputs/androidTest-results/
             emulator-review/
           if-no-files-found: ignore
       - name: Clear temporary keystore

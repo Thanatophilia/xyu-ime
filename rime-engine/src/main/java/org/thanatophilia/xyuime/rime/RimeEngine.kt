@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 internal object NativeRime {
     init { System.loadLibrary("xyu_rime") }
@@ -29,7 +30,12 @@ class RimeEngine(context: Context) {
     companion object {
         private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "RimeWorker") }
         private var initialized = false
-        private const val DATA_VERSION = "pinyin-simp-0c6861e-1"
+        private const val DATA_VERSION = "pinyin-simp-0c6861e-2"
+        const val SNAPSHOT = 0
+        const val PROCESS_KEY = 1
+        const val SELECT_CANDIDATE = 2
+        const val CLEAR = 3
+        const val COMMIT = 4
     }
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -37,37 +43,46 @@ class RimeEngine(context: Context) {
     private var owner = -1
     private var sequence = 0L
     @Volatile private var closed = false
+    private val generation = AtomicLong()
 
     private fun initialize() {
         if (initialized) return
         val root = File(app.filesDir, "rime")
-        val shared = File(root, "shared").apply { mkdirs() }
-        val user = File(root, "user").apply { mkdirs() }
-        val log = File(root, "log").apply { mkdirs() }
-        val marker = File(shared, "version")
-        if (!marker.exists() || marker.readText() != DATA_VERSION) {
-            // Replace only bundled files; never remove the writable user directory.
-            app.assets.list("rime")!!.forEach { name ->
-                val temp = File(shared, "$name.tmp")
-                app.assets.open("rime/$name").use { input -> temp.outputStream().use { input.copyTo(it) } }
-                check(temp.renameTo(File(shared, name)))
-            }
-            marker.writeText(DATA_VERSION)
-        }
+        val shared = BundledRimeData.install(app.assets, root, DATA_VERSION)
+        val user = File(root, "user").apply { check(isDirectory || mkdirs()) }
+        val log = File(root, "log").apply { check(isDirectory || mkdirs()) }
         check(NativeRime.initialize(shared.path, user.path, log.path))
-        initialized = true
+        // A version marker means successful deployment, never merely successful copying.
+        try {
+            val temp = File(root, "version.tmp").apply { writeText(DATA_VERSION) }
+            check(temp.renameTo(File(root, "version")))
+            initialized = true
+        } catch (failure: Exception) {
+            NativeRime.shutdown()
+            throw failure
+        }
     }
 
+    /**
+     * Main-thread callback; reset/close cancel queued results. Caller must also reject old
+     * inputSessionId/sequence and candidate snapshots when its editor/composition changes.
+     * key is an X11/Rime keysym for PROCESS_KEY, a zero-based global index for SELECT_CANDIDATE.
+     * SNAPSHOT returns the first limit global candidates without changing the selection.
+     * isLastPage means this returned prefix exhausted the iterator (not menu.page_no).
+     * COMMIT commits Rime's composition; raw-pinyin Return uses keysym 0xff0d instead.
+     * cursor is a UTF-16 offset; commitText is drained exactly once by every request.
+     */
     fun request(sessionId: Int, operation: Int = 0, key: Int = 0, limit: Int = 64,
                 callback: (RimeOutput) -> Unit) {
         if (closed) return
+        val epoch = generation.get()
         worker.execute {
-            if (closed) return@execute
+            if (closed || generation.get() != epoch) return@execute
             val serial = ++sequence
             val result = try {
                 initialize()
                 if (owner != sessionId || handle == 0L) {
-                    if (handle != 0L) NativeRime.destroySession(handle)
+                    destroySession()
                     handle = NativeRime.createSession()
                     check(handle != 0L)
                     owner = sessionId
@@ -80,14 +95,25 @@ class RimeEngine(context: Context) {
             } catch (_: LinkageError) {
                 RimeOutput(sessionId, serial, error = "中文引擎加载失败")
             }
-            main.post { if (!closed) callback(result) }
+            main.post { if (!closed && generation.get() == epoch) callback(result) }
         }
     }
 
+    private fun destroySession() {
+        val previous = handle
+        handle = 0L
+        owner = -1
+        if (previous != 0L) NativeRime.destroySession(previous)
+    }
+
     fun reset() {
+        generation.incrementAndGet()
         worker.execute {
-            if (handle != 0L) NativeRime.destroySession(handle)
-            handle = 0L; owner = -1
+            try { destroySession() } catch (_: Exception) {
+                // The local handle is already invalidated. Never log input or crash the worker.
+            } catch (_: LinkageError) {
+                // A missing native library must not break closing the frontend.
+            }
         }
     }
 
