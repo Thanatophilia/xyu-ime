@@ -20,6 +20,10 @@ class ImePhase3Test {
         val previous = device.executeShellCommand("settings get secure default_input_method").trim()
         fun control(tag: String) = requireNotNull(device.waitForFreshObject(By.res(tag).pkg(pkg), 15000)) { tag }
         fun tap(tag: String) { control(tag).click(); device.waitForIdle() }
+        fun has(tag: String): Boolean {
+            device.freshImeTree()
+            return device.hasObject(By.res(tag).pkg(pkg))
+        }
         fun typePinyin() { for (letter in "nihao") tap("key:$letter") }
         try {
             val id = "$pkg/org.thanatophilia.xyuime.ime.XyuImeService"
@@ -35,12 +39,12 @@ class ImePhase3Test {
             control("candidate:0")
             tap("candidate_toggle")
             control("candidate_drawer")
-            assertFalse(device.hasObject(By.res("key:q").pkg(pkg)))
-            assertFalse(device.hasObject(By.res("key:空格").pkg(pkg)))
+            assertFalse(has("key:q"))
+            assertFalse(has("key:空格"))
             // Reverse the drawer repeatedly; no ordinary keys exist while expanded.
             tap("candidate_toggle")
             tap("candidate_toggle")
-            assertFalse(device.hasObject(By.res("key:q").pkg(pkg)))
+            assertFalse(has("key:q"))
             tap("candidate_toggle")
             control("key:q")
             requireNotNull(device.wait(Until.findObject(By.descStartsWith("回车：").pkg(pkg)), 8000)).click()
