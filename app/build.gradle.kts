@@ -11,6 +11,7 @@ android {
     defaultConfig {
         applicationId = "org.thanatophilia.xyuime"
         minSdk = 26
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = providers.environmentVariable("XYU_VERSION_CODE").orElse("1").get().toInt()
