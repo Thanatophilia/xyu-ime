@@ -20,7 +20,14 @@ class ImePhase2Test {
     private val context = instrumentation.targetContext
     private val device = UiDevice.getInstance(instrumentation)
     private val pkg = context.packageName
-    private fun node(selector: BySelector): UiObject2 = requireNotNull(device.wait(Until.findObject(selector), 8_000)) { "Missing UI control: $selector" }
+    private fun freshTree() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache()
+        device.waitForIdle()
+    }
+    private fun node(selector: BySelector): UiObject2 {
+        freshTree()
+        return requireNotNull(device.wait(Until.findObject(selector), 8_000)) { "Missing UI control: $selector" }
+    }
     private fun key(text: String) {
         node(By.res("key:$text").pkg(pkg)).click()
         device.waitForIdle()
@@ -30,10 +37,14 @@ class ImePhase2Test {
         device.waitForIdle()
     }
     private fun editing() {
+        freshTree()
+        if (device.hasObject(By.res("key:全选").pkg(pkg))) return
         description("编辑工具")
         node(By.res("key:全选").pkg(pkg))
     }
     private fun letters() {
+        freshTree()
+        if (device.hasObject(By.res("key:q").pkg(pkg))) return
         description("编辑工具")
         node(By.res("key:q").pkg(pkg))
     }
@@ -53,6 +64,11 @@ class ImePhase2Test {
         assertTrue("Expected editor content: $text", device.wait(Until.hasObject(By.clazz("android.widget.EditText").pkg(pkg).text(text)), 5_000))
     }
     private fun screenshot(name: String) {
+        val xml = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "$name.xml")
+        freshTree()
+        device.dumpWindowHierarchy(xml)
+        device.executeShellCommand("mkdir -p /sdcard/Download/xyu-ime-review")
+        device.executeShellCommand("cp ${xml.absolutePath} /sdcard/Download/xyu-ime-review/$name.xml")
         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "$name.png")
         if (device.takeScreenshot(file)) {
             device.executeShellCommand("mkdir -p /sdcard/Download/xyu-ime-review")
