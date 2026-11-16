@@ -118,6 +118,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             actionLabel = EditorPolicy.enterAction(
                 attribute?.imeOptions ?: 0, attribute?.actionId ?: 0, attribute?.actionLabel?.toString(),
             ).label,
+            editing = false,
+            selecting = false,
             sensitive = EditorPolicy.isPassword(type),
             hasSelection = selectionStart >= 0 && selectionStart != selectionEnd,
             comma = if (ascii) "," else "，",

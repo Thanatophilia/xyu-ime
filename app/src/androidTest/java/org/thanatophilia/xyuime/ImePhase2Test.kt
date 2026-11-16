@@ -60,13 +60,12 @@ class ImePhase2Test {
         description("编辑工具")
         screenshot("phase2-editing")
         description("光标左移")
-        description("编辑工具")
         key("x")
         expectText("abxc")
-        description("编辑工具")
         key("全选")
         assertTrue(device.wait(Until.hasObject(By.text("复制").enabled(true)), 3_000))
         key("复制")
+        key("全选")
         key("剪切")
         expectText("")
         key("粘贴")
@@ -74,7 +73,6 @@ class ImePhase2Test {
         key("行尾")
         key("选择")
         description("光标左移")
-        description("编辑工具")
         key("z")
         expectText("abxz")
         screenshot("phase2-text")
@@ -82,13 +80,11 @@ class ImePhase2Test {
 
     @Test fun completeEmojiDeleteAndPasswordClipboardProtection() = withIme {
         // The explicit sample fixture contains no personal/user clipboard content.
-        device.pressBack()
         key("填入 emoji 样例")
         editor().click()
         node(By.text("q").pkg(pkg))
         val expected = listOf("A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣é", "A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣", "A👨‍👩‍👧‍👦👍🏽🇨🇳", "A👨‍👩‍👧‍👦👍🏽", "A👨‍👩‍👧‍👦", "A", "")
         expected.forEach { remaining -> description("删除，长按连续删除"); expectText(remaining) }
-        device.pressBack()
         key("密码")
         editor().click()
         node(By.text("q").pkg(pkg))
