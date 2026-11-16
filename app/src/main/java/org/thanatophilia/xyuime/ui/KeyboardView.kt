@@ -137,6 +137,7 @@ data class KeyboardUiState(
     val preedit: String = "",
     val candidates: List<String> = emptyList(),
     val candidateComments: List<String> = emptyList(),
+    val candidateSession: Int = -1,
     val candidateRevision: Long = 0,
     val highlightedCandidate: Int = 0,
     val hasMoreCandidates: Boolean = false,
@@ -165,6 +166,11 @@ sealed interface KeyboardAction {
     data class SelectCandidate(val revision: Long, val index: Int) : KeyboardAction
     data class LoadMoreCandidates(val revision: Long) : KeyboardAction
     data class SetChinese(val enabled: Boolean) : KeyboardAction
+    // Candidate-page actions are scoped to the input session; repeating delete never falls
+    // through to deleting committed editor text once the composition has ended.
+    data class CandidateBackspace(val session: Int) : KeyboardAction
+    data class ClearCandidateComposition(val session: Int) : KeyboardAction
+    data class ReturnFromCandidates(val session: Int) : KeyboardAction
     data object ToggleCandidates : KeyboardAction
     data object NextLanguage : KeyboardAction
 
@@ -298,8 +304,9 @@ private fun KeyboardSurface(
     val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
+    var wordFilter by remember(state.candidateRevision) { mutableStateOf(CandidateWordFilter.All) }
     var syllableSelectionRequest by remember(state.candidateRevision) { mutableStateOf(0L) }
-    LaunchedEffect(selectedSyllable, drawerScroll, syllableSelectionRequest) { drawerScroll.scrollToItem(0) }
+    LaunchedEffect(selectedSyllable, wordFilter, drawerScroll, syllableSelectionRequest) { drawerScroll.scrollToItem(0) }
     val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
         animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
@@ -334,7 +341,7 @@ private fun KeyboardSurface(
                     selectedSyllable, onSelectSyllable = {
                         selectedSyllable = it
                         syllableSelectionRequest++
-                    },
+                    }, wordFilter = wordFilter, onWordFilter = { wordFilter = it },
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
@@ -449,14 +456,17 @@ private fun CandidateChevron(expanded: Boolean, color: Color, modifier: Modifier
 @Composable
 private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
     scroll: LazyGridState, syllableScroll: LazyListState, selectedSyllable: String?,
-    onSelectSyllable: (String?) -> Unit, modifier: Modifier) {
+    onSelectSyllable: (String?) -> Unit, wordFilter: CandidateWordFilter,
+    onWordFilter: (CandidateWordFilter) -> Unit, modifier: Modifier) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
     val candidates = remember(state.candidates, state.candidateComments) {
         drawerCandidates(state.candidates, state.candidateComments)
     }
     val choices = remember(candidates) { syllableChoices(candidates) }
-    val visible = remember(candidates, selectedSyllable) { filterCandidates(candidates, selectedSyllable) }
+    val visible = remember(candidates, selectedSyllable, wordFilter) {
+        filterCandidates(candidates, selectedSyllable, wordFilter)
+    }
     // Reaching the last currently-known syllables must also discover later engine groups.
     LaunchedEffect(syllableScroll, choices.size, state.candidates.size, state.loadingCandidates) {
         snapshotFlow { syllableScroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
@@ -468,7 +478,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
     }
     // Request subsequent native prefixes when the filtered view approaches its loaded end.
     // An empty filtered page is not proof there are no matches in later native candidates.
-    LaunchedEffect(scroll, visible.size, state.candidates.size, state.loadingCandidates, selectedSyllable) {
+    LaunchedEffect(scroll, visible.size, state.candidates.size, state.loadingCandidates, selectedSyllable, wordFilter) {
         snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
             .distinctUntilChanged().collect { last ->
                 if ((visible.isEmpty() || last >= visible.size - 8) &&
@@ -513,11 +523,47 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                     CandidateCell(candidate.text, candidate.index, state, onAction,
                         Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
                 }
-                if (state.loadingCandidates) item(key = "loading", span = { GridItemSpan(columns) }) {
-                    Text("正在加载…", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
+                    item(key = "empty", span = { GridItemSpan(columns) }) {
+                        Text("没有符合筛选的候选", Modifier.padding(12.dp).semantics {
+                            testTagsAsResourceId = true; testTag = "candidate_empty"
+                        }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                if (state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
+                    Text("正在加载…", Modifier.padding(12.dp).semantics {
+                        testTagsAsResourceId = true; testTag = "candidate_loading"
+                    }, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp)
                 }
             }
+        }
+        Column(Modifier.width(56.dp).fillMaxHeight().padding(3.dp).semantics {
+            testTagsAsResourceId = true; testTag = "candidate_tools"
+        }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val shape = RoundedCornerShape(6.dp)
+            val fontScale = LocalDensity.current.fontScale
+            val typeLabel = when (wordFilter) {
+                CandidateWordFilter.All -> "全部"
+                CandidateWordFilter.Single -> "单字"
+                CandidateWordFilter.Phrase -> "词语"
+            }
+            KeyFace(typeLabel, "候选类型：$typeLabel", fontScale, shape,
+                Modifier.fillMaxWidth().weight(1f), small = true,
+                customTag = "candidate_type", onClick = {
+                    onWordFilter(CandidateWordFilter.entries[(wordFilter.ordinal + 1) % CandidateWordFilter.entries.size])
+                })
+            KeyFace("删除", "删除当前拼音", fontScale, shape,
+                Modifier.fillMaxWidth().weight(1f), small = true, repeat = true,
+                customTag = "candidate_delete", icon = "delete",
+                onClick = { onAction(KeyboardAction.CandidateBackspace(state.candidateSession)) })
+            KeyFace("清空", "清空当前拼音", fontScale, shape,
+                Modifier.fillMaxWidth().weight(1f), small = true,
+                customTag = "candidate_clear",
+                onClick = { onAction(KeyboardAction.ClearCandidateComposition(state.candidateSession)) })
+            KeyFace("返回", "返回键盘", fontScale, shape,
+                Modifier.fillMaxWidth().weight(1f), small = true,
+                customTag = "candidate_return",
+                onClick = { onAction(KeyboardAction.ReturnFromCandidates(state.candidateSession)) })
         }
     }
 }
@@ -754,7 +800,8 @@ private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shap
 @Composable
 private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
     modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false, enabled: Boolean = true,
-    onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
+    onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false,
+    customTag: String? = null) {
     val colors = MaterialTheme.colorScheme
     val view = LocalView.current
     val configuration = LocalViewConfiguration.current
@@ -821,7 +868,7 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
             role = Role.Button
             contentDescription = description
             testTagsAsResourceId = true
-            testTag = "key:$description"
+            testTag = customTag ?: "key:$description"
             if (icon == null) text = AnnotatedString(label)
             if (!enabled) disabled()
             onClick { if (available) { click(); true } else false }

@@ -91,7 +91,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         lastPreedit = ""
         if (::rime.isInitialized) rime.reset()
         keyboardState = keyboardState.copy(preedit = "", candidates = emptyList(), candidateComments = emptyList(),
-            candidateRevision = chineseSession.revision, candidatesExpanded = false, loadingCandidates = false)
+            candidateRevision = chineseSession.revision, candidateSession = chineseSession.epoch,
+            candidatesExpanded = false, loadingCandidates = false)
     }
 
     private fun configureChinese(info: EditorInfo?) {
@@ -168,7 +169,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             }
             keyboardState = keyboardState.copy(preedit = output.preedit,
                 candidates = output.candidates, candidateComments = output.candidateComments,
-                candidateRevision = chineseSession.revision,
+                candidateRevision = chineseSession.revision, candidateSession = chineseSession.epoch,
                 highlightedCandidate = output.highlightedIndex,
                 hasMoreCandidates = !output.isLastPage && chineseSession.limit < ChineseSession.MAX_LIMIT,
                 candidatesExpanded = keyboardState.candidatesExpanded && output.hasComposition)
@@ -399,7 +400,27 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         keyboardState = keyboardState.copy(uppercase = caseState.uppercase, capsLock = caseState.locked)
     }
 
+    private fun candidateToolSession(action: KeyboardAction): Int? = when (action) {
+        is KeyboardAction.CandidateBackspace -> action.session
+        is KeyboardAction.ClearCandidateComposition -> action.session
+        is KeyboardAction.ReturnFromCandidates -> action.session
+        else -> null
+    }
+
+    private fun candidateToolValid(session: Int): Boolean =
+        session == chineseSession.epoch && chinese && composing && keyboardState.candidatesExpanded
+
     private fun handleAction(action: KeyboardAction) {
+        candidateToolSession(action)?.let { session ->
+            if (!candidateToolValid(session)) return
+            // A held delete can produce events faster than native Rime replies. Keep
+            // at most one pending repeat, and let clear/return replace pending tools.
+            if (action is KeyboardAction.CandidateBackspace) {
+                if (actions.any { candidateToolSession(it) != null }) return
+            } else {
+                actions.removeAll { candidateToolSession(it) != null }
+            }
+        }
         // Reject obsolete UI snapshots before enqueuing and again before dispatch.
         if (action is KeyboardAction.SelectCandidate && !chineseSession.matches(action.revision)) return
         if (action is KeyboardAction.LoadMoreCandidates &&
@@ -409,6 +430,18 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     }
 
     private fun dispatchAction(action: KeyboardAction) {
+        candidateToolSession(action)?.let { session ->
+            if (candidateToolValid(session)) when (action) {
+                is KeyboardAction.CandidateBackspace -> requestRime(1, 0xff08)
+                is KeyboardAction.ClearCandidateComposition ->
+                    requestRime(org.thanatophilia.xyuime.rime.RimeEngine.CLEAR)
+                is KeyboardAction.ReturnFromCandidates ->
+                    keyboardState = keyboardState.copy(candidatesExpanded = false)
+                else -> Unit
+            }
+            // A stale held press must never fall through to ordinary editor deletion.
+            return
+        }
         when (action) {
             is KeyboardAction.SetChinese -> { switchLanguage(action.enabled); return }
             KeyboardAction.NextLanguage -> {
@@ -490,7 +523,9 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             is KeyboardAction.MoveCursor -> moveCursor(action.direction)
             KeyboardAction.NextLanguage, KeyboardAction.ToggleCandidates,
             is KeyboardAction.SelectCandidate, is KeyboardAction.LoadMoreCandidates,
-            is KeyboardAction.SetChinese -> Unit
+            is KeyboardAction.SetChinese,
+            is KeyboardAction.CandidateBackspace, is KeyboardAction.ClearCandidateComposition,
+            is KeyboardAction.ReturnFromCandidates -> Unit
             KeyboardAction.PickInputMethod -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
         }
     }

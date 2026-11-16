@@ -22,5 +22,22 @@ internal fun drawerCandidates(texts: List<String>, comments: List<String>): List
 internal fun syllableChoices(candidates: List<DrawerCandidate>): List<String> =
     candidates.mapNotNull { it.syllable }.distinct()
 
-internal fun filterCandidates(candidates: List<DrawerCandidate>, syllable: String?): List<DrawerCandidate> =
-    if (syllable == null) candidates else candidates.filter { it.syllable == syllable }
+/** Whole-candidate code point counts, including punctuation and mixed text; no trimming. */
+internal enum class CandidateWordFilter { All, Single, Phrase }
+
+/** Intersects the first-syllable and word-type filters without changing rank or native indices.
+ * Empty text is available only under All. Supplementary characters count as one code point.
+ */
+internal fun filterCandidates(
+    candidates: List<DrawerCandidate>,
+    syllable: String?,
+    type: CandidateWordFilter = CandidateWordFilter.All,
+): List<DrawerCandidate> =
+    if (syllable == null && type == CandidateWordFilter.All) candidates
+    else candidates.filter { candidate ->
+        (syllable == null || candidate.syllable == syllable) && when (type) {
+            CandidateWordFilter.All -> true
+            CandidateWordFilter.Single -> candidate.text.codePointCount(0, candidate.text.length) == 1
+            CandidateWordFilter.Phrase -> candidate.text.codePointCount(0, candidate.text.length) > 1
+        }
+    }

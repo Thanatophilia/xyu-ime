@@ -719,6 +719,70 @@ class ImePhase3InputRegressionTest {
         }
     }
 
+    @Test fun candidateToolsDeleteClearAndReturnPreserveCommittedText() = withChineseEditor {
+        typeLetters("nihao")
+        enter("完成")
+        awaitSnapshot("Seed committed text") { it.text == "nihao" && it.composing == null }
+        val geometry = settledEditorGeometry()
+        typeLetters("nihao")
+        tap("candidate_toggle")
+        val grid = node("candidate_grid").visibleBounds
+        val tools = node("candidate_tools").visibleBounds
+        assertTrue("Tools belong to the right of candidates", grid.right <= tools.left)
+        floatingScreenshot("phase3-candidate-tools")
+        tap("candidate_delete")
+        awaitSnapshot("Delete edits only the current code") {
+            it.text.startsWith("nihao") && it.composing?.replace(" ", "") == "niha"
+        }
+        node("candidate_drawer")
+        tap("candidate_return")
+        node("key:q")
+        assertEquals(geometry, settledEditorGeometry())
+        assertEquals("niha", snapshot().composing?.replace(" ", ""))
+        tap("candidate_toggle")
+        tap("candidate_clear")
+        awaitSnapshot("Clear cancels only the current composition") {
+            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        }
+        noCandidates()
+        noFloatingPreedit()
+        assertEquals(geometry, settledEditorGeometry())
+        typeLetters("nihao")
+        tap("candidate_toggle")
+        val delete = node("candidate_delete").visibleBounds
+        // Hold longer than the entire code; queued repeats must never reach committed text.
+        device.swipe(delete.centerX(), delete.centerY(), delete.centerX(), delete.centerY(), 130)
+        awaitSnapshot("Held candidate deletion stops at composition boundary") {
+            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        }
+        SystemClock.sleep(300)
+        assertEquals("nihao", snapshot().text)
+        noCandidates()
+    }
+
+    @Test fun candidateTypeSwitchFiltersRealSingleAndPhraseCandidates() = withChineseEditor {
+        typeLetters("nh")
+        val before = awaitSnapshot("Abbreviation is composing") { it.composing != null }
+        tap("candidate_toggle")
+        val all = settledCandidates()
+        tap("candidate_type")
+        val single = settledCandidates()
+        assertTrue("Single mode contains one Unicode code point", single.all {
+            it.text.codePointCount(0, it.text.length) == 1
+        })
+        tap("candidate_type")
+        val phrases = settledCandidates()
+        assertTrue("Phrase mode contains more than one Unicode code point", phrases.all {
+            it.text.codePointCount(0, it.text.length) > 1
+        })
+        assertEquals("Filtering must not commit text", before, snapshot())
+        floatingScreenshot("phase3-candidate-tools-phrases")
+        tap("candidate_type")
+        assertEquals("All restores original indices and words", all, settledCandidates())
+        tap("candidate_return")
+        node("key:q")
+    }
+
     @Test fun candidateStripDoesNotResizeLetterKeys() = withChineseEditor {
         // The strip is reserved above the key area. Composition may only change its contents;
         // it must not move or shrink the letters or the fixed bottom row.
