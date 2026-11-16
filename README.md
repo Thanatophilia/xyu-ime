@@ -21,7 +21,9 @@
 - Compose 生命周期由输入法服务管理；使用标准输入法窗口，不添加悬浮窗。
 - 无网络权限、不记录输入内容。
 
-## 第二阶段 · 已完成
+## 第二阶段 · 句首大写修正版待复测
+
+用户在初次验收后补报 0.2.30 句号后未恢复大写的问题，原验收结论对此项重新打开。修正版 **0.2.32**（代码 `840cab7`）补充句末标点识别，保留普通空格不触发句首大写的规则。[Actions #32](https://github.com/Thanatophilia/xyu-ime/actions/runs/43869246346) 通过，包含实际键盘句首大写回归；待用户复测。下方 0.2.30 信息保留为历史记录。
 
 - 交付版本：**0.2.30**，代码提交 [`423bcff`](https://github.com/Thanatophilia/xyu-ime/commit/423bcff056a9e4d0b30c3d3a441b787d321c3fcd)。
 - 云端构建：[Android APK #30](https://github.com/Thanatophilia/xyu-ime/actions/runs/43862876985)，编译、14 项单元测试、Android Lint（0 错误）、6 项 Android 16 模拟器测试和 APK 签名校验通过。
