@@ -221,4 +221,20 @@ class ImePhase3InputRegressionTest {
         }
         noCandidates()
     }
+
+    @Test fun candidateStripDoesNotResizeLetterKeys() = withChineseEditor {
+        // The strip is reserved above the key area. Composition may only change its contents;
+        // it must not move or shrink the letters or the fixed bottom row.
+        val qBefore = node("key:q").visibleBounds
+        val spaceBefore = node("key:空格").visibleBounds
+        typeLetters("nihao")
+        awaitSnapshot("nihao must be composing") { it.composing?.replace(" ", "") == "nihao" }
+        val qAfter = node("key:q").visibleBounds
+        val spaceAfter = node("key:空格").visibleBounds
+        assertEquals("Letter key must not move or shrink when candidates appear", qBefore, qAfter)
+        assertEquals("Bottom row must not move or shrink when candidates appear", spaceBefore, spaceAfter)
+        val toggle = node("candidate_toggle").visibleBounds
+        assertTrue("Candidate strip must sit above the letter keys", toggle.bottom <= qAfter.top)
+        assertTrue("Candidate strip must sit above the bottom row", toggle.bottom <= spaceAfter.top)
+    }
 }

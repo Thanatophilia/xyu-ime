@@ -220,8 +220,10 @@ fun XyuKeyboard(
 ) {
     val configuration = LocalConfiguration.current
     val compactLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val preferredHeight = if (compactLandscape) 180.dp else 268.dp
-    val maximumHeight = if (compactLandscape) 190.dp else 280.dp
+    // Reserve the candidate strip in the fixed keyboard height. Showing a composition only
+    // changes the strip's contents, never the letter area or bottom row geometry.
+    val preferredHeight = if (compactLandscape) 191.dp else 286.dp
+    val maximumHeight = if (compactLandscape) 203.dp else 299.dp
 
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) XyuDarkColors else XyuLightColors,
@@ -269,9 +271,8 @@ private fun KeyboardSurface(
     val fontScale = density.fontScale
     val outerPadding = if (compactLandscape) 4.dp else 5.dp
     val rowGap = if (compactLandscape) 3.dp else 5.dp
-    val stripHeight = if (state.preedit.isNotEmpty()) {
-        if (compactLandscape) 44.dp else 58.dp
-    } else if (compactLandscape) 23.dp else 28.dp
+    // Always reserved, so pinyin composition cannot push or squeeze the letter keys.
+    val stripHeight = if (compactLandscape) 34.dp else 46.dp
     val stripScroll = remember(state.candidateRevision) { LazyListState() }
     val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
     val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
