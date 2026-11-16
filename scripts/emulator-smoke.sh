@@ -5,7 +5,7 @@ mkdir -p emulator-review
 adb shell settings put secure show_ime_with_hard_keyboard 1
 ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest
 result=$?
-timeout 20s adb pull /sdcard/Android/data/org.thanatophilia.xyuime.debug/files/Pictures/diagnostics/. emulator-review/ || true
+timeout 20s adb pull /sdcard/Download/xyu-ime-review/. emulator-review/ || true
 timeout 15s adb logcat -d -t 3000 > emulator-review/logcat.txt || true
 timeout 15s adb shell dumpsys input_method > emulator-review/input-method.txt || true
 exit "$result"

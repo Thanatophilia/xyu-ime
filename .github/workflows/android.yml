@@ -42,7 +42,6 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Verify real IME window on Android 36
-        continue-on-error: true
         id: emulator_ime_smoke
         uses: reactivecircus/android-emulator-runner@v2
         with:

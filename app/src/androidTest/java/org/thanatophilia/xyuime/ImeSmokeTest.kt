@@ -25,8 +25,14 @@ class ImeSmokeTest {
         val previous = device.executeShellCommand("settings get secure default_input_method").trim()
         val shots = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "diagnostics")
         shots.mkdirs()
+        // connectedAndroidTest may uninstall the target app when it finishes. Copy review
+        // screenshots to shell-owned storage before that cleanup removes app-specific files.
+        val reviewPath = "/sdcard/Download/xyu-ime-review"
+        device.executeShellCommand("mkdir -p $reviewPath")
         fun shot(name: String) {
-            device.takeScreenshot(File(shots, "$name.png"))
+            val screenshot = File(shots, "$name.png")
+            assertTrue("Review screenshot must be saved", device.takeScreenshot(screenshot))
+            device.executeShellCommand("cp ${screenshot.absolutePath} $reviewPath/$name.png")
             File(shots, "$name-window.txt").writeText(device.executeShellCommand("dumpsys window"))
             File(shots, "$name-ime.txt").writeText(device.executeShellCommand("dumpsys input_method"))
         }
@@ -38,8 +44,8 @@ class ImeSmokeTest {
             context.startActivity(Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             assertNotNull(device.wait(Until.findObject(By.pkg(packageName).depth(0)), 20_000))
-            val editor = device.wait(Until.findObject(By.focused(true).pkg(packageName)), 10_000)
-                ?: device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(packageName)), 10_000)
+            val editorSelector = By.clazz("android.widget.EditText").pkg(packageName)
+            val editor = device.wait(Until.findObject(editorSelector), 10_000)
             if (editor == null) {
                 shot("editor-missing")
                 File(shots, "page.xml").writeText(device.executeShellCommand("uiautomator dump /sdcard/window.xml >/dev/null; cat /sdcard/window.xml"))
@@ -53,7 +59,7 @@ class ImeSmokeTest {
             requireNotNull(q).click()
             assertTrue(
                 "IME key must commit q through InputConnection",
-                device.wait(Until.hasObject(By.pkg(packageName).textContains("q")), 5_000),
+                device.wait(Until.hasObject(By.clazz("android.widget.EditText").pkg(packageName).textContains("q")), 5_000),
             )
             device.pressBack()
             requireNotNull(editor).click()
