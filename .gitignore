@@ -1,3 +1,5 @@
+.native/
+**/.cxx/
 .gradle/
 .idea/
 .kotlin/

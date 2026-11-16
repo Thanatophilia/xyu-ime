@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "XyuIME"
-include(":app")
+include(":app", ":rime-engine")
