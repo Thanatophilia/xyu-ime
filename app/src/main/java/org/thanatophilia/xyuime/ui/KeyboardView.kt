@@ -545,9 +545,12 @@ private fun CandidateCell(candidate: String, index: Int, state: KeyboardUiState,
             testTagsAsResourceId = true
             testTag = "candidate:$index"
             role = Role.Button
+            // The whole tap target has a label even when its inset text is clipped by scrolling.
+            text = AnnotatedString(candidate)
         }.padding(horizontal = if (expanded) 10.dp else 12.dp, vertical = if (expanded) 10.dp else 4.dp),
         contentAlignment = Alignment.Center) {
-        Text(candidate, color = if (index == state.highlightedCandidate) MaterialTheme.colorScheme.primary
+        Text(candidate, modifier = Modifier.clearAndSetSemantics {},
+            color = if (index == state.highlightedCandidate) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurface,
             fontWeight = if (index == state.highlightedCandidate) FontWeight.SemiBold else FontWeight.Normal,
             fontSize = if (expanded) 20.sp else 18.sp,
