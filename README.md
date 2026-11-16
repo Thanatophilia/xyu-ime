@@ -1,6 +1,6 @@
 # 絮雨输入法 · Xyu IME
 
-以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。阶段三已接入离线 Rime/librime 简体全拼，正在完成云端回归与候选 APK 交付，用户实机验收待完成。阶段二主体已验收，句首大写修正版仍待用户复测。后续再推进布局优化与键盘自定义。
+以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。阶段三已接入离线 Rime/librime 简体全拼，云端回归与候选 APK 已完成，用户实机验收待完成。阶段二主体已验收，句首大写修正版仍待用户复测。后续再推进布局优化与键盘自定义。
 
 ## 第一阶段 · 已完成
 
@@ -38,6 +38,15 @@
 - 密码禁止复制/剪切；剪贴板只在用户明确点击粘贴时读取，无后台监听和历史记录。
 - 原符号页布局与底部七键顺序保留。本阶段尚未接入 Rime 与中文。
 - [阶段二手机验收清单](docs/acceptance-phase2.md)。
+
+## 第三阶段 · 云端完成，用户设备待验收
+
+- 候选交付版本：**0.3.45**，代码提交 [`f5cd71c`](https://github.com/Thanatophilia/xyu-ime/commit/f5cd71c1590627fa0b2d5bdca3d094003747b8e0)，Actions [#45](https://github.com/Thanatophilia/xyu-ime/actions/runs/43916400390) 已成功。
+- APK：[xyu-ime-0.3.45.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43916400390)；SHA256：`0c98f1277824bab18b726917e7a8c4637b02a88bffb3c02f087cd553ccdd4d42`。
+- JUnit 实际报告：app JVM **21 passed**，Rime JVM **0 tests**；app Android 36 **14 passed**，Rime Android 36 **4 passed**；合计 **39 passed / 0 skipped / 0 failures / 0 errors**。另有 Android Lint **0 errors**。
+- 交付门禁证据：`apksigner verify` **Verification successful**（固定签名）；`zipalign -c -P 16 -v 4` 全部条目 **OK**；`native-validation.txt` 验证双 ABI 原生库与 ELF LOAD 对齐通过。
+- 状态：**云端完成；用户设备验收待完成**。安装包保留候选抽屉展开时隐藏普通键和底部七键的行为。
+- [阶段三手机验收清单](docs/acceptance-phase3.md)。
 
 ## APK 云端构建
 
