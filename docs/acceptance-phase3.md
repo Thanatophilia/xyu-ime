@@ -1,6 +1,10 @@
 # 阶段三候选版手机验收
 
-状态：**云端回归验证完成；用户设备验收待完成。** 不得据模拟器结果宣布阶段三实机验收通过。候选版本 0.3.45、提交 f5cd71c、Actions #45、APK SHA256 与测试计数见 README 及同包 BUILD.txt、SHA256SUMS.txt。
+状态：**云端回归验证完成；用户设备验收待完成。** 不得据模拟器结果宣布阶段三实机验收通过。候选版本 **0.3.46（46）**，代码提交 `a76d950f79ac8b788045ffe3691447a7dd43756f`，[Actions #46](https://github.com/Thanatophilia/xyu-ime/actions/runs/43918514208) 全部成功。
+
+APK SHA256：`cba8b71b582a68ce9faadd4279a5e91f0f2a599cc3abf4b5c3ac395040ae7034`。最新报告为 app JVM 21、Rime JVM 部署事务测试入口 1、app Android 36 14、Rime Android 36 4，合计 40 passed、0 skipped、0 failures；可用 JUnit XML 均为 0 errors（Rime JVM 计数来自 Gradle HTML，artifact 未收录其 XML）。Lint 0 errors、13 warnings、4 hints。签名 v2、ZIP 16 KB 对齐、双 ABI 与各原生库 ELF LOAD 16 KB 对齐均通过；下载后校验和及原生 verifier 复验通过。详情见 README。
+
+**0.3.45 不作为交付包**：其额外 armeabi-v7a/x86 库导致原生验证失败，旧流水线 tee 掩盖了失败。0.3.46 已修复 ABI 过滤和失败传播。原始 #46 artifact 的 READ-ME.md 是构建时旧文档，请使用本清单；BUILD.txt、SHA256SUMS.txt 与 APK 版本不受影响。
 
 ## 安装与数据
 
