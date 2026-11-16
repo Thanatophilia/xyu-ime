@@ -781,10 +781,14 @@ class ImePhase3InputRegressionTest {
         floatingScreenshot("phase3-candidate-tools-single")
         tap("candidate_type")
         assertEquals("The low-left cycle returns to All and never shows phrases-only", all, settledCandidates())
-        // Paging buttons move the page indicator, not the committed text.
-        tap("candidate_page_down")
-        assertTrue("A later page keeps the composition", before == snapshot())
-        tap("candidate_page_up")
+        // Right-rail paging really advances the Rime page and keeps the composition.
+        val pageOne = settledCandidates()
+        tap("candidate_tools_page_down")
+        val pageTwo = settledCandidates()
+        assertNotEquals("Page-down must show a different candidate page", pageOne, pageTwo)
+        assertTrue("Paging keeps the composition", before == snapshot())
+        tap("candidate_tools_page_up")
+        assertEquals("Page-up must restore the previous page", pageOne, settledCandidates())
         assertEquals("Returning a page keeps the composition", before, snapshot())
         node("candidate_toggle")
     }

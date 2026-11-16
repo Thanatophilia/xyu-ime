@@ -492,22 +492,21 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             }
     }
     Row(modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
-        LazyColumn(state = syllableScroll,
-            modifier = Modifier.width(64.dp).fillMaxHeight()
-                .background(MaterialTheme.colorScheme.surface)
-                .semantics { testTagsAsResourceId = true; testTag = "candidate_syllables" }) {
-            item(key = "all") { SyllableChoice(null, selectedSyllable == null, onSelectSyllable) }
-            itemsIndexed(choices, key = { _, value -> value }) { _, syllable ->
-                SyllableChoice(syllable, selectedSyllable == syllable, onSelectSyllable)
+        Column(Modifier.width(64.dp).fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surface)
+            .semantics { testTagsAsResourceId = true; testTag = "candidate_syllables" }) {
+            LazyColumn(state = syllableScroll, modifier = Modifier.weight(1f).fillMaxWidth()) {
+                item(key = "all") { SyllableChoice(null, selectedSyllable == null, onSelectSyllable) }
+                itemsIndexed(choices, key = { _, value -> value }) { _, syllable ->
+                    SyllableChoice(syllable, selectedSyllable == syllable, onSelectSyllable)
+                }
             }
-            item(key = "type") {
-                // Low, narrow rail: cycles only between 全部 and 单字; 词语 stays filtered out here.
-                val typeLabel = if (wordFilter == CandidateWordFilter.Single) "单字" else "全部"
-                SyllableChoice(null, wordFilter == CandidateWordFilter.Single, {
-                    onWordFilter(if (wordFilter == CandidateWordFilter.Single) CandidateWordFilter.All
-                    else CandidateWordFilter.Single)
-                }, tag = "candidate_type", label = typeLabel)
-            }
+            // Pinned at the low left: cycles only between 全部 and 单字; 词语 is not offered here.
+            val typeLabel = if (wordFilter == CandidateWordFilter.Single) "单字" else "全部"
+            SyllableChoice(null, wordFilter == CandidateWordFilter.Single, {
+                onWordFilter(if (wordFilter == CandidateWordFilter.Single) CandidateWordFilter.All
+                else CandidateWordFilter.Single)
+            }, tag = "candidate_type", label = typeLabel)
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)))
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
@@ -530,42 +529,27 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             val page = (state.highlightedCandidate / pageSize)
                 .coerceIn(0, pageCount - 1)
             val paged = visible.drop(page * pageSize).take(pageSize)
-            Column(Modifier.fillMaxSize()) {
-                LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
-                    modifier = Modifier.weight(1f).fillMaxWidth().semantics {
-                        testTagsAsResourceId = true
-                        testTag = "candidate_grid"
-                    }) {
-                    itemsIndexed(paged, key = { _, candidate -> candidate.index },
-                        span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
-                        CandidateCell(candidate.text, candidate.index, state, onAction,
-                            Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
-                    }
-                    if (visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
-                        item(key = "empty", span = { GridItemSpan(columns) }) {
-                            Text("没有符合筛选的候选", Modifier.padding(12.dp).semantics {
-                                testTagsAsResourceId = true; testTag = "candidate_empty"
-                            }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                        }
-                    if (state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
-                        Text("正在加载…", Modifier.padding(12.dp).semantics {
-                            testTagsAsResourceId = true; testTag = "candidate_loading"
-                        }, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp)
-                    }
+            LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
+                modifier = Modifier.fillMaxSize().semantics {
+                    testTagsAsResourceId = true
+                    testTag = "candidate_grid"
+                }) {
+                itemsIndexed(paged, key = { _, candidate -> candidate.index },
+                    span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
+                    CandidateCell(candidate.text, candidate.index, state, onAction,
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
                 }
-                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    KeyFace("${page + 1}/$pageCount", "候选页码，共 $pageCount 页", fontScale, RoundedCornerShape(6.dp),
-                        Modifier.weight(0.8f).fillMaxHeight(), small = true, customTag = "candidate_pager",
-                        onClick = { })
-                    KeyFace("上页", "上一页候选", fontScale, RoundedCornerShape(6.dp),
-                        Modifier.weight(1.1f).fillMaxHeight(), small = true, enabled = page > 0,
-                        customTag = "candidate_page_up",
-                        onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = false)) })
-                    KeyFace("下页", "下一页候选", fontScale, RoundedCornerShape(6.dp),
-                        Modifier.weight(1.1f).fillMaxHeight(), small = true, enabled = page < pageCount - 1,
-                        customTag = "candidate_page_down",
-                        onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = true)) })
+                if (visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
+                    item(key = "empty", span = { GridItemSpan(columns) }) {
+                        Text("没有符合筛选的候选", Modifier.padding(12.dp).semantics {
+                            testTagsAsResourceId = true; testTag = "candidate_empty"
+                        }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                if (state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
+                    Text("正在加载…", Modifier.padding(12.dp).semantics {
+                        testTagsAsResourceId = true; testTag = "candidate_loading"
+                    }, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp)
                 }
             }
         }
