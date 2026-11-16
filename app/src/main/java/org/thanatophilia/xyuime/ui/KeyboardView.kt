@@ -298,7 +298,8 @@ private fun KeyboardSurface(
     val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
-    LaunchedEffect(selectedSyllable, drawerScroll) { drawerScroll.scrollToItem(0) }
+    var syllableSelectionRequest by remember(state.candidateRevision) { mutableStateOf(0L) }
+    LaunchedEffect(selectedSyllable, drawerScroll, syllableSelectionRequest) { drawerScroll.scrollToItem(0) }
     val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
         animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
@@ -330,7 +331,10 @@ private fun KeyboardSurface(
             Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)) {
                 CandidateDrawer(state, onAction, drawerScroll, syllableScroll,
-                    selectedSyllable, onSelectSyllable = { selectedSyllable = it },
+                    selectedSyllable, onSelectSyllable = {
+                        selectedSyllable = it
+                        syllableSelectionRequest++
+                    },
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
