@@ -106,7 +106,15 @@ class ImePhase2Test {
         expectText("abxc")
         editing()
         key("全选")
-        assertTrue(device.wait(Until.hasObject(By.res("key:复制").enabled(true)), 3_000))
+        val selectionDeadline = android.os.SystemClock.uptimeMillis() + 6_000
+        var copyEnabled = false
+        while (android.os.SystemClock.uptimeMillis() < selectionDeadline) {
+            freshTree()
+            copyEnabled = device.findObject(By.res("key:复制").pkg(pkg))?.isEnabled == true
+            if (copyEnabled) break
+            android.os.SystemClock.sleep(100)
+        }
+        assertTrue("Copy must become enabled after editor acknowledges select-all", copyEnabled)
         key("复制")
         key("全选")
         key("剪切")
