@@ -51,11 +51,12 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest
-      - name: Collect keyboard screenshot
+      - name: Collect keyboard screenshot and IME diagnostics
         if: always()
         run: |
           mkdir -p emulator-review
-          adb pull /sdcard/Android/data/org.thanatophilia.xyuime.debug/files/Pictures/keyboard-phase1.png emulator-review/ || true
+          adb pull /sdcard/Android/data/org.thanatophilia.xyuime.debug/files/Pictures/diagnostics/. emulator-review/ || true
+          adb logcat -d -t 3000 > emulator-review/logcat.txt || true
       - name: Restore fixed signing identity
         if: github.event_name != 'pull_request'
         env:
