@@ -21,7 +21,7 @@ namespace {
 std::mutex mutex;
 RimeApi* api = rime_get_api();
 bool ready = false;
-std::string shared, user, logs;
+std::string shared, userDataPath, logs;
 std::string utf8(JNIEnv* env, jstring s) {
     if (!s) throw std::invalid_argument("null path");
     const auto length = env->GetStringLength(s);
@@ -48,13 +48,13 @@ extern "C" JNIEXPORT jboolean JNICALL JNI(initialize)(JNIEnv* env, jobject, jstr
     try {
         const auto nextShared = utf8(env, s), nextUser = utf8(env, u), nextLogs = utf8(env, l);
         if (ready) {
-            if (shared != nextShared || user != nextUser || logs != nextLogs)
+            if (shared != nextShared || userDataPath != nextUser || logs != nextLogs)
                 throw std::invalid_argument("engine already initialized with other paths");
             return true;
         }
-        shared = nextShared; user = nextUser; logs = nextLogs;
+        shared = nextShared; userDataPath = nextUser; logs = nextLogs;
         RIME_STRUCT(RimeTraits, traits);
-        traits.shared_data_dir = shared.c_str(); traits.user_data_dir = user.c_str();
+        traits.shared_data_dir = shared.c_str(); traits.user_data_dir = userDataPath.c_str();
         traits.log_dir = logs.c_str(); traits.app_name = "rime.xyu";
         traits.distribution_name = "Xyu"; traits.distribution_code_name = "xyu";
         traits.distribution_version = "0.3"; traits.min_log_level = 3;
