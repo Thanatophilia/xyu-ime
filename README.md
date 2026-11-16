@@ -41,13 +41,13 @@
 
 ## 第三阶段 · 悬浮编码显示基线已归档，完整实机验收待完成
 
-- 候选交付版本：**0.3.54**（versionCode 54），代码提交 [`741f9d7`](https://github.com/Thanatophilia/xyu-ime/commit/741f9d762920365768fec038486e44b644969a42)，Actions [#54](https://github.com/Thanatophilia/xyu-ime/actions/runs/43961010664) 全部门禁成功。展开/收回使用宽口圆端折线图标，展开页改为左侧拼音首音节筛选、右侧按词长分配宽度的候选区；“全部”恢复原始候选。候选拼音来自 Rime 词典实际读音，筛选后使用原始全局索引上屏。
-- APK：[xyu-ime-0.3.54.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43961010664)；SHA256：`d8ce45ebd11573c5a176da0d0d7800d36ec67090bfc2affb1d352d1fc1b6cb3b`，下载后与同包校验和复核一致。
-- 最新实际测试报告：app JVM **25 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **21 passed**；Rime Android 36 **6 passed**；合计 **53 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 15 warnings / 5 hints**。新增测试覆盖候选/读音配对、多音字与简拼、合成和学习词读音、筛选后非零全局索引上屏及“全部”恢复；既有独立悬浮编码、窗口稳定性、返回和编辑回归继续通过。
+- 候选交付版本：**0.3.55**（versionCode 55），代码提交 [`a91c40c`](https://github.com/Thanatophilia/xyu-ime/commit/a91c40c2ac2f055fcaf04e229d85111cf7d79a04)，Actions [#55](https://github.com/Thanatophilia/xyu-ime/actions/runs/43973067954) 全部门禁成功。展开页保持左侧拼音首音节筛选和按词长分配的候选区，右侧新增操作栏：“全部／单字／词语”类型切换、删除（长按连删）、清空当前编码、返回键盘。删除与清空只作用于未提交拼音，不会波及已上屏正文。
+- APK：[xyu-ime-0.3.55.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43973067954)；SHA256：`739264980bb580462be236bf55af182c9d52832a05c9c8b3c3f835832ea44215`，下载后与同包校验和复核一致。
+- 最新实际测试报告：app JVM **25 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **23 passed**；Rime Android 36 **6 passed**；合计 **55 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 15 warnings / 5 hints**。新增测试覆盖删除边界、长按停手、清空保留正文、返回保留编码，以及“单字／词语”按 Unicode 码点筛选；既有悬浮编码、音节筛选、窗口稳定性和编辑回归继续通过。
 - 交付门禁证据：`apksigner verify --verbose --print-certs` 输出 **Verifies**、v2 **true**；固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。`zipalign -c -P 16 -v 4` 输出 **Verification successful**；`verify-apk.py` 在 CI 和下载后本地复验均通过，仅含 **arm64-v8a / x86_64**，4 个原生库各 3 个 ELF LOAD 段满足 16 KB 对齐，Rime 资源齐全。
-- 历史记录：0.3.45 额外 ABI 与验证失败传播问题已修正；0.3.47 修复候选栏挤压键盘；0.3.51 实现独立悬浮编码并获核心显示效果认可。0.3.52—0.3.53 的候选标签和重复选择复位问题已在 0.3.54 修复。原始 artifact 的 READ-ME.md 为构建前文档快照，请以本页及最新验收清单为准；当前 APK、BUILD.txt 与校验和对应 0.3.54。
-- 实机反馈与小阶段归档：2026-11-17，用户对 0.3.51 反馈“还好，有需要优化的，至少效果做对了”，显示基线归档提交 `1dbf405`。随后用户要求更换过尖箭头，并确认选择左侧音节栏；0.3.54 为本轮优化交付，尚未收到实机结论。
-- 状态：**旧显示基线已归档；候选页优化待实机审查；阶段三完整功能与兼容性实机验收仍待完成**。独立悬浮编码、固定候选栏、完整候选页替换底部七键的结构保留。
+- 历史记录：0.3.45 额外 ABI 与验证失败传播问题已修正；0.3.47 修复候选栏挤压键盘；0.3.51 实现独立悬浮编码并获核心显示效果认可；0.3.52—0.3.53 的问题已在 0.3.54 修复；0.3.54 交付左侧音节栏与候选排列，本轮 0.3.55 补齐操作栏。原始 artifact 的 READ-ME.md 为构建前文档快照，请以本页及最新验收清单为准；当前 APK、BUILD.txt 与校验和对应 0.3.55。
+- 实机反馈与小阶段归档：2026-11-17，用户对 0.3.51 反馈“还好，有需要优化的，至少效果做对了”，显示基线归档提交 `1dbf405`。随后用户要求更换过尖箭头、确认左侧音节栏（0.3.54），并要求补齐候选页操作（0.3.55）；两个候选页版本均待实机审查。
+- 状态：**旧显示基线已归档；候选页优化与操作栏待实机审查；阶段三完整功能与兼容性实机验收仍待完成**。独立悬浮编码、固定候选栏、完整候选页替换底部七键的结构保留。
 - [候选页设计与参考](docs/candidate-page.md)；左栏按实际候选首音节筛选，缺失读音保留在“全部”，沿用 4096 项候选前缀上限。
 - [阶段三手机验收清单](docs/acceptance-phase3.md)。
 
