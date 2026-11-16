@@ -402,19 +402,23 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     private fun candidateToolSession(action: KeyboardAction): Int? = when (action) {
         is KeyboardAction.CandidateBackspace -> action.session
-        is KeyboardAction.ClearCandidateComposition -> action.session
-        is KeyboardAction.ReturnFromCandidates -> action.session
+        is KeyboardAction.CandidatePage -> action.session
+        is KeyboardAction.CandidateCommit -> action.session
         else -> null
     }
 
-    private fun candidateToolValid(session: Int): Boolean =
-        session == chineseSession.epoch && chinese && composing && keyboardState.candidatesExpanded
+    /** Delete and paging stay available while a composition exists, even after collapsing. */
+    private fun candidateToolValid(action: KeyboardAction, session: Int): Boolean {
+        val scopedToDrawer = action is KeyboardAction.CandidateCommit
+        return session == chineseSession.epoch && chinese && composing &&
+            (!scopedToDrawer || keyboardState.candidatesExpanded)
+    }
 
     private fun handleAction(action: KeyboardAction) {
         candidateToolSession(action)?.let { session ->
-            if (!candidateToolValid(session)) return
+            if (!candidateToolValid(action, session)) return
             // A held delete can produce events faster than native Rime replies. Keep
-            // at most one pending repeat, and let clear/return replace pending tools.
+            // at most one pending repeat; paging and commit are single-shot.
             if (action is KeyboardAction.CandidateBackspace) {
                 if (actions.any { candidateToolSession(it) != null }) return
             } else {
@@ -431,12 +435,17 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     private fun dispatchAction(action: KeyboardAction) {
         candidateToolSession(action)?.let { session ->
-            if (candidateToolValid(session)) when (action) {
+            if (candidateToolValid(action, session)) when (action) {
                 is KeyboardAction.CandidateBackspace -> requestRime(1, 0xff08)
-                is KeyboardAction.ClearCandidateComposition ->
-                    requestRime(org.thanatophilia.xyuime.rime.RimeEngine.CLEAR)
-                is KeyboardAction.ReturnFromCandidates ->
-                    keyboardState = keyboardState.copy(candidatesExpanded = false)
+                is KeyboardAction.CandidatePage -> {
+                    val page = keyboardState.highlightedCandidate / ChineseSession.PAGE_SIZE
+                    requestRime(1, if (action.forward) 0xff56 else 0xff55,
+                        after = {
+                            if (keyboardState.highlightedCandidate / ChineseSession.PAGE_SIZE != page)
+                                requestRime(more = true)
+                        })
+                }
+                is KeyboardAction.CandidateCommit -> requestRime(2, keyboardState.highlightedCandidate)
                 else -> Unit
             }
             // A stale held press must never fall through to ordinary editor deletion.

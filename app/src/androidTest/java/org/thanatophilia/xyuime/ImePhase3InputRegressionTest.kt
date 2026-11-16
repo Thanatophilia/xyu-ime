@@ -735,52 +735,58 @@ class ImePhase3InputRegressionTest {
             it.text.startsWith("nihao") && it.composing?.replace(" ", "") == "niha"
         }
         node("candidate_drawer")
-        tap("candidate_return")
-        node("key:q")
-        assertEquals(geometry, settledEditorGeometry())
+        // Right rail: delete, page up, page down, enter (commit only, never sends).
+        val tools = node("candidate_tools")
+        assertTrue("Right rail must expose delete", tools.hasObject(By.res("candidate_delete")))
+        assertTrue("Right rail must expose page up", tools.hasObject(By.res("candidate_tools_page_up")))
+        assertTrue("Right rail must expose page down", tools.hasObject(By.res("candidate_tools_page_down")))
+        assertTrue("Right rail must expose commit", tools.hasObject(By.res("candidate_enter")))
         assertEquals("niha", snapshot().composing?.replace(" ", ""))
-        tap("candidate_toggle")
-        tap("candidate_clear")
-        awaitSnapshot("Clear cancels only the current composition") {
-            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        tap("candidate_enter")
+        awaitSnapshot("Candidate enter commits text without sending") {
+            it.text == "nihaoniha" && it.composing == null && it.actions.isEmpty()
         }
         noCandidates()
         noFloatingPreedit()
         assertEquals(geometry, settledEditorGeometry())
-        typeLetters("nihao")
+        // Removing the last code character is delete, not clear: e must stay until Enter.
+        typeLetters("e")
         tap("candidate_toggle")
-        val delete = node("candidate_delete").visibleBounds
-        // Hold longer than the entire code; queued repeats must never reach committed text.
-        device.swipe(delete.centerX(), delete.centerY(), delete.centerX(), delete.centerY(), 130)
-        awaitSnapshot("Held candidate deletion stops at composition boundary") {
-            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        tap("candidate_delete")
+        awaitSnapshot("Deleting the last code keeps the composition alive") {
+            it.text == "nihaoniha" && it.composing == ""
         }
         SystemClock.sleep(300)
-        assertEquals("nihao", snapshot().text)
+        assertEquals("nihaoniha", snapshot().text)
         noCandidates()
+        assertEquals(geometry, settledEditorGeometry())
     }
 
-    @Test fun candidateTypeSwitchFiltersRealSingleAndPhraseCandidates() = withChineseEditor {
+    @Test fun candidateTypeCycleStaysSingleAndNeverOffersPhraseOnly() = withChineseEditor {
         typeLetters("nh")
         val before = awaitSnapshot("Abbreviation is composing") { it.composing != null }
         tap("candidate_toggle")
         val all = settledCandidates()
+        assertTrue("All-mode abbreviations include phrases", all.any {
+            it.text.codePointCount(0, it.text.length) > 1
+        })
         tap("candidate_type")
         val single = settledCandidates()
         assertTrue("Single mode contains one Unicode code point", single.all {
             it.text.codePointCount(0, it.text.length) == 1
         })
-        tap("candidate_type")
-        val phrases = settledCandidates()
-        assertTrue("Phrase mode contains more than one Unicode code point", phrases.all {
-            it.text.codePointCount(0, it.text.length) > 1
-        })
+        assertTrue("Single mode is a strict subset of All", all.containsAll(single) &&
+            single.size < all.size)
         assertEquals("Filtering must not commit text", before, snapshot())
-        floatingScreenshot("phase3-candidate-tools-phrases")
+        floatingScreenshot("phase3-candidate-tools-single")
         tap("candidate_type")
-        assertEquals("All restores original indices and words", all, settledCandidates())
-        tap("candidate_return")
-        node("key:q")
+        assertEquals("The low-left cycle returns to All and never shows phrases-only", all, settledCandidates())
+        // Paging buttons move the page indicator, not the committed text.
+        tap("candidate_page_down")
+        assertTrue("A later page keeps the composition", before == snapshot())
+        tap("candidate_page_up")
+        assertEquals("Returning a page keeps the composition", before, snapshot())
+        node("candidate_toggle")
     }
 
     @Test fun candidateStripDoesNotResizeLetterKeys() = withChineseEditor {

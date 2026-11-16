@@ -169,8 +169,8 @@ sealed interface KeyboardAction {
     // Candidate-page actions are scoped to the input session; repeating delete never falls
     // through to deleting committed editor text once the composition has ended.
     data class CandidateBackspace(val session: Int) : KeyboardAction
-    data class ClearCandidateComposition(val session: Int) : KeyboardAction
-    data class ReturnFromCandidates(val session: Int) : KeyboardAction
+    data class CandidatePage(val session: Int, val forward: Boolean) : KeyboardAction
+    data class CandidateCommit(val session: Int) : KeyboardAction
     data object ToggleCandidates : KeyboardAction
     data object NextLanguage : KeyboardAction
 
@@ -187,6 +187,9 @@ sealed interface KeyboardAction {
 enum class CursorDirection { Left, Right, Up, Down, Home, End }
 
 private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
+
+/** Candidate-page paging matches the Rime menu page size used by the bundled schema. */
+private const val PAGE_SIZE = 9
 
 private val XyuLightColors = lightColorScheme(
     primary = Color(0xFF536C66),
@@ -496,6 +499,14 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             itemsIndexed(choices, key = { _, value -> value }) { _, syllable ->
                 SyllableChoice(syllable, selectedSyllable == syllable, onSelectSyllable)
             }
+            item(key = "type") {
+                // Low, narrow rail: cycles only between 全部 and 单字; 词语 stays filtered out here.
+                val typeLabel = if (wordFilter == CandidateWordFilter.Single) "单字" else "全部"
+                SyllableChoice("·$typeLabel", false, {
+                    wordFilter = if (wordFilter == CandidateWordFilter.Single) CandidateWordFilter.All
+                    else CandidateWordFilter.Single
+                }, tag = "candidate_type", label = typeLabel)
+            }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)))
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
@@ -513,27 +524,47 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 val padding = with(density) { 20.dp.toPx() }
                 ceil((textWidth + padding) / columnWidth).toInt().coerceIn(minOf(2, columns), columns)
             }
-            LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
-                modifier = Modifier.fillMaxSize().semantics {
-                    testTagsAsResourceId = true
-                    testTag = "candidate_grid"
-                }) {
-                itemsIndexed(visible, key = { _, candidate -> candidate.index },
-                    span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
-                    CandidateCell(candidate.text, candidate.index, state, onAction,
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
-                }
-                if (visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
-                    item(key = "empty", span = { GridItemSpan(columns) }) {
-                        Text("没有符合筛选的候选", Modifier.padding(12.dp).semantics {
-                            testTagsAsResourceId = true; testTag = "candidate_empty"
-                        }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            val pageSize = PAGE_SIZE
+            val pageCount = if (visible.isEmpty()) 1 else (visible.size + pageSize - 1) / pageSize
+            val page = (state.highlightedCandidate / pageSize)
+                .coerceIn(0, pageCount - 1)
+            val paged = visible.drop(page * pageSize).take(pageSize)
+            Column(Modifier.fillMaxSize()) {
+                LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
+                    modifier = Modifier.weight(1f).fillMaxWidth().semantics {
+                        testTagsAsResourceId = true
+                        testTag = "candidate_grid"
+                    }) {
+                    itemsIndexed(paged, key = { _, candidate -> candidate.index },
+                        span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
+                        CandidateCell(candidate.text, candidate.index, state, onAction,
+                            Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
                     }
-                if (state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
-                    Text("正在加载…", Modifier.padding(12.dp).semantics {
-                        testTagsAsResourceId = true; testTag = "candidate_loading"
-                    }, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp)
+                    if (visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
+                        item(key = "empty", span = { GridItemSpan(columns) }) {
+                            Text("没有符合筛选的候选", Modifier.padding(12.dp).semantics {
+                                testTagsAsResourceId = true; testTag = "candidate_empty"
+                            }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        }
+                    if (state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
+                        Text("正在加载…", Modifier.padding(12.dp).semantics {
+                            testTagsAsResourceId = true; testTag = "candidate_loading"
+                        }, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp)
+                    }
+                }
+                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    KeyFace("${page + 1}/$pageCount", "候选页码，共 $pageCount 页", fontScale, RoundedCornerShape(6.dp),
+                        Modifier.weight(0.8f).fillMaxHeight(), small = true, customTag = "candidate_pager",
+                        onClick = { })
+                    KeyFace("上页", "上一页候选", fontScale, RoundedCornerShape(6.dp),
+                        Modifier.weight(1.1f).fillMaxHeight(), small = true, enabled = page > 0,
+                        customTag = "candidate_page_up",
+                        onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = false)) })
+                    KeyFace("下页", "下一页候选", fontScale, RoundedCornerShape(6.dp),
+                        Modifier.weight(1.1f).fillMaxHeight(), small = true, enabled = page < pageCount - 1,
+                        customTag = "candidate_page_down",
+                        onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = true)) })
                 }
             }
         }
@@ -542,46 +573,38 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
         }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val shape = RoundedCornerShape(6.dp)
             val fontScale = LocalDensity.current.fontScale
-            val typeLabel = when (wordFilter) {
-                CandidateWordFilter.All -> "全部"
-                CandidateWordFilter.Single -> "单字"
-                CandidateWordFilter.Phrase -> "词语"
-            }
-            KeyFace(typeLabel, "候选类型：$typeLabel", fontScale, shape,
-                Modifier.fillMaxWidth().weight(1f), small = true,
-                customTag = "candidate_type", onClick = {
-                    onWordFilter(CandidateWordFilter.entries[(wordFilter.ordinal + 1) % CandidateWordFilter.entries.size])
-                })
             KeyFace("删除", "删除当前拼音", fontScale, shape,
                 Modifier.fillMaxWidth().weight(1f), small = true, repeat = true,
                 customTag = "candidate_delete", icon = "delete",
                 onClick = { onAction(KeyboardAction.CandidateBackspace(state.candidateSession)) })
-            KeyFace("清空", "清空当前拼音", fontScale, shape,
-                Modifier.fillMaxWidth().weight(1f), small = true,
-                customTag = "candidate_clear",
-                onClick = { onAction(KeyboardAction.ClearCandidateComposition(state.candidateSession)) })
-            KeyFace("返回", "返回键盘", fontScale, shape,
-                Modifier.fillMaxWidth().weight(1f), small = true,
-                customTag = "candidate_return",
-                onClick = { onAction(KeyboardAction.ReturnFromCandidates(state.candidateSession)) })
+            KeyFace("上页", "上一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
+                small = true, customTag = "candidate_tools_page_up",
+                onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = false)) })
+            KeyFace("下页", "下一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
+                small = true, customTag = "candidate_tools_page_down",
+                onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = true)) })
+            KeyFace(state.actionLabel, "回车：${state.actionLabel}（仅提交候选，不发送）", fontScale, shape,
+                Modifier.fillMaxWidth().weight(1f), small = true, active = true, customTag = "candidate_enter",
+                onClick = { onAction(KeyboardAction.CandidateCommit(state.candidateSession)) })
         }
     }
 }
 
 @Composable
-private fun SyllableChoice(syllable: String?, active: Boolean, select: (String?) -> Unit) {
+private fun SyllableChoice(syllable: String?, active: Boolean, select: (String?) -> Unit,
+    tag: String? = null, label: String? = null) {
     val shape = RoundedCornerShape(6.dp)
     Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 4.dp, vertical = 2.dp)
         .clip(shape).background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
         .clickable { select(syllable) }
         .semantics {
             testTagsAsResourceId = true
-            testTag = "syllable:${syllable ?: "all"}"
+            testTag = tag ?: "syllable:${syllable ?: "all"}"
             selected = active
             role = Role.Tab
             contentDescription = if (syllable == null) "全部候选" else "拼音 $syllable"
         }.padding(horizontal = 3.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
-        Text(syllable ?: "全部", fontSize = 14.sp, maxLines = 1,
+        Text(label ?: syllable ?: "全部", fontSize = 14.sp, maxLines = 1,
             overflow = TextOverflow.Ellipsis, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
     }
