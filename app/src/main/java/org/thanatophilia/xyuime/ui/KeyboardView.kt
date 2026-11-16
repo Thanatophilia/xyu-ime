@@ -469,7 +469,7 @@ private fun EditingPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> U
         Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             KeyFace("行首", "光标到行首", fontScale, shape, Modifier.weight(1f).fillMaxHeight(), small = true,
                 onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Home)) })
-            KeyFace("↑", "光标上移",, fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
+            KeyFace("↑", "光标上移", fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
                 onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Up)) })
             KeyFace("行尾", "光标到行尾", fontScale, shape, Modifier.weight(1f).fillMaxHeight(), small = true,
                 onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.End)) })
