@@ -444,7 +444,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
                     if (composing) finishRaw {} else enter()
                     return
                 }
-                KeyboardAction.Shift, KeyboardAction.CapsLock -> Unit
+                KeyboardAction.Shift, KeyboardAction.CapsLock,
+                KeyboardAction.ToggleSymbols, KeyboardAction.ToggleNumbers -> Unit
                 else -> if (composing) {
                     finishRaw { dispatchOrdinaryAction(action) }; return
                 }
