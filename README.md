@@ -23,6 +23,10 @@
 
 ## 第二阶段 · 基础编辑待实机验收
 
+- 交付版本：**0.2.30**，代码提交 [`423bcff`](https://github.com/Thanatophilia/xyu-ime/commit/423bcff056a9e4d0b30c3d3a441b787d321c3fcd)。
+- 云端构建：[Android APK #30](https://github.com/Thanatophilia/xyu-ime/actions/runs/43862876985)，编译、14 项单元测试、Android Lint（0 错误）、6 项 Android 16 模拟器测试和 APK 签名校验通过。
+- 使用与阶段一相同的固定签名，可覆盖安装 0.1.22。阶段二尚待用户实机验收。
+
 - 顶部“编辑”入口：光标方向、行首/行尾、选择模式、全选、复制、剪切、主动粘贴。
 - 系统 ICU 完整字符边界处理组合 emoji 和组合音标删除；依照设备 Unicode 数据。
 - 独立自动大写与手动 Shift 状态，保留长按大写锁定。
