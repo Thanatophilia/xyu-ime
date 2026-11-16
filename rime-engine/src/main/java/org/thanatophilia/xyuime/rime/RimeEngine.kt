@@ -30,6 +30,7 @@ class RimeEngine(context: Context) {
     companion object {
         private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "RimeWorker") }
         private var initialized = false
+        private var nativeClosed = true
         private const val DATA_VERSION = "pinyin-simp-0c6861e-2"
         const val SNAPSHOT = 0
         const val PROCESS_KEY = 1
@@ -48,19 +49,25 @@ class RimeEngine(context: Context) {
     private fun initialize() {
         if (initialized) return
         val root = File(app.filesDir, "rime")
-        val shared = BundledRimeData.install(app.assets, root, DATA_VERSION)
-        val user = File(root, "user").apply { check(isDirectory || mkdirs()) }
-        val log = File(root, "log").apply { check(isDirectory || mkdirs()) }
-        check(NativeRime.initialize(shared.path, user.path, log.path))
-        // A version marker means successful deployment, never merely successful copying.
-        try {
-            val temp = File(root, "version.tmp").apply { writeText(DATA_VERSION) }
-            check(temp.renameTo(File(root, "version")))
-            initialized = true
-        } catch (failure: Exception) {
+        // A failed shutdown must never permit a later request to snapshot an open DB.
+        if (!nativeClosed) {
             NativeRime.shutdown()
-            throw failure
+            nativeClosed = true
         }
+        RimeDeployment(root).initialize(DATA_VERSION,
+            prepare = { BundledRimeData.install(app.assets, root, DATA_VERSION) },
+            start = { shared, user ->
+                val log = File(root, "log").apply { check(isDirectory || mkdirs()) }
+                nativeClosed = false
+                check(NativeRime.initialize(shared.path, user.path, log.path))
+            },
+            stop = {
+                if (!nativeClosed) {
+                    NativeRime.shutdown()
+                    nativeClosed = true
+                }
+            })
+        initialized = true
     }
 
     /**
