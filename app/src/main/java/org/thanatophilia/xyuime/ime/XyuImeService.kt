@@ -90,7 +90,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         composingEnd = -1
         lastPreedit = ""
         if (::rime.isInitialized) rime.reset()
-        keyboardState = keyboardState.copy(preedit = "", candidates = emptyList(),
+        keyboardState = keyboardState.copy(preedit = "", candidates = emptyList(), candidateComments = emptyList(),
             candidateRevision = chineseSession.revision, candidatesExpanded = false, loadingCandidates = false)
     }
 
@@ -167,7 +167,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
                 }
             }
             keyboardState = keyboardState.copy(preedit = output.preedit,
-                candidates = output.candidates, candidateRevision = chineseSession.revision,
+                candidates = output.candidates, candidateComments = output.candidateComments,
+                candidateRevision = chineseSession.revision,
                 highlightedCandidate = output.highlightedIndex,
                 hasMoreCandidates = !output.isLastPage && chineseSession.limit < ChineseSession.MAX_LIMIT,
                 candidatesExpanded = keyboardState.candidatesExpanded && output.hasComposition)

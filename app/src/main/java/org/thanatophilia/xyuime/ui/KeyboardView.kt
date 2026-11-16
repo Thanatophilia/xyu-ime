@@ -7,6 +7,13 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.semantics.selected
+import kotlin.math.ceil
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -129,6 +136,7 @@ data class KeyboardUiState(
     val chinese: Boolean = false,
     val preedit: String = "",
     val candidates: List<String> = emptyList(),
+    val candidateComments: List<String> = emptyList(),
     val candidateRevision: Long = 0,
     val highlightedCandidate: Int = 0,
     val hasMoreCandidates: Boolean = false,
@@ -288,6 +296,9 @@ private fun KeyboardSurface(
     val stripHeight = if (compactLandscape) 34.dp else 46.dp
     val stripScroll = remember(state.candidateRevision) { LazyListState() }
     val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
+    val syllableScroll = remember(state.candidateRevision) { LazyListState() }
+    var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedSyllable, drawerScroll) { drawerScroll.scrollToItem(0) }
     val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
         animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
@@ -318,8 +329,9 @@ private fun KeyboardSurface(
             // accessibility targets can leak through the animated candidate surface.
             Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)) {
-                CandidateDrawer(state, onAction, drawerScroll,
-                    Modifier.fillMaxSize().graphicsLayer {
+                CandidateDrawer(state, onAction, drawerScroll, syllableScroll,
+                    selectedSyllable, onSelectSyllable = { selectedSyllable = it },
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
                     })
@@ -409,45 +421,137 @@ private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) ->
                     stateDescription = if (state.candidatesExpanded) "已展开" else "已收起"
                     role = Role.Button
                 }, contentAlignment = Alignment.Center) {
-                Text(if (state.candidatesExpanded) "⌃" else "⌄", fontSize = 24.sp,
-                    color = MaterialTheme.colorScheme.primary)
+                CandidateChevron(state.candidatesExpanded, MaterialTheme.colorScheme.primary,
+                    Modifier.size(26.dp).clearAndSetSemantics {})
             }
+    }
+}
+
+@Composable
+private fun CandidateChevron(expanded: Boolean, color: Color, modifier: Modifier) {
+    Canvas(modifier) {
+        val u = size.minDimension / 24f
+        val ends = if (expanded) 14f else 10f
+        val tip = if (expanded) 10f else 14f
+        val path = Path().apply {
+            moveTo(4f * u, ends * u)
+            lineTo(12f * u, tip * u)
+            lineTo(20f * u, ends * u)
+        }
+        drawPath(path, color, style = Stroke(2f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
     }
 }
 
 @Composable
 private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
-    scroll: LazyGridState, modifier: Modifier) {
+    scroll: LazyGridState, syllableScroll: LazyListState, selectedSyllable: String?,
+    onSelectSyllable: (String?) -> Unit, modifier: Modifier) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
-    LaunchedEffect(scroll, state.candidates.size, state.loadingCandidates) {
-        snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+    val candidates = remember(state.candidates, state.candidateComments) {
+        drawerCandidates(state.candidates, state.candidateComments)
+    }
+    val choices = remember(candidates) { syllableChoices(candidates) }
+    val visible = remember(candidates, selectedSyllable) { filterCandidates(candidates, selectedSyllable) }
+    // Reaching the last currently-known syllables must also discover later engine groups.
+    LaunchedEffect(syllableScroll, choices.size, state.candidates.size, state.loadingCandidates) {
+        snapshotFlow { syllableScroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
             .distinctUntilChanged().collect { last ->
-                if (last >= current.candidates.size - 16 && current.hasMoreCandidates && !current.loadingCandidates)
+                if (last >= choices.size && current.hasMoreCandidates && !current.loadingCandidates) {
                     action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+                }
             }
     }
-    LazyVerticalGrid(columns = GridCells.Adaptive(88.dp), state = scroll,
-        modifier = modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
-        itemsIndexed(state.candidates, key = { index, _ -> index }) { index, candidate ->
-            CandidateCell(candidate, index, state, onAction, Modifier.fillMaxWidth().heightIn(min = 44.dp))
+    // Request subsequent native prefixes when the filtered view approaches its loaded end.
+    // An empty filtered page is not proof there are no matches in later native candidates.
+    LaunchedEffect(scroll, visible.size, state.candidates.size, state.loadingCandidates, selectedSyllable) {
+        snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .distinctUntilChanged().collect { last ->
+                if ((visible.isEmpty() || last >= visible.size - 8) &&
+                    current.hasMoreCandidates && !current.loadingCandidates) {
+                    action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+                }
+            }
+    }
+    Row(modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
+        LazyColumn(state = syllableScroll,
+            modifier = Modifier.width(64.dp).fillMaxHeight()
+                .background(MaterialTheme.colorScheme.surface)
+                .semantics { testTagsAsResourceId = true; testTag = "candidate_syllables" }) {
+            item(key = "all") { SyllableChoice(null, selectedSyllable == null, onSelectSyllable) }
+            itemsIndexed(choices, key = { _, value -> value }) { _, syllable ->
+                SyllableChoice(syllable, selectedSyllable == syllable, onSelectSyllable)
+            }
+        }
+        Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)))
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+            val density = LocalDensity.current
+            val columns = (maxWidth.value / 28f).toInt().coerceAtLeast(1)
+            val columnWidth = with(density) { maxWidth.toPx() } / columns
+            val measurer = rememberTextMeasurer()
+            // Measure spans lazily for rows the grid visits, not every loaded candidate.
+            val widths = remember(visible, measurer, columnWidth, columns, density.fontScale) {
+                mutableMapOf<Int, Int>()
+            }
+            fun candidateSpan(candidate: DrawerCandidate): Int = widths.getOrPut(candidate.index) {
+                val textWidth = measurer.measure(candidate.text, TextStyle(fontSize = 20.sp),
+                    maxLines = 1, softWrap = false).size.width
+                val padding = with(density) { 20.dp.toPx() }
+                ceil((textWidth + padding) / columnWidth).toInt().coerceIn(minOf(2, columns), columns)
+            }
+            LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
+                modifier = Modifier.fillMaxSize().semantics {
+                    testTagsAsResourceId = true
+                    testTag = "candidate_grid"
+                }) {
+                itemsIndexed(visible, key = { _, candidate -> candidate.index },
+                    span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
+                    CandidateCell(candidate.text, candidate.index, state, onAction,
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
+                }
+                if (state.loadingCandidates) item(key = "loading", span = { GridItemSpan(columns) }) {
+                    Text("正在加载…", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp)
+                }
+            }
         }
     }
 }
 
 @Composable
+private fun SyllableChoice(syllable: String?, active: Boolean, select: (String?) -> Unit) {
+    val shape = RoundedCornerShape(6.dp)
+    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 4.dp, vertical = 2.dp)
+        .clip(shape).background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+        .clickable { select(syllable) }
+        .semantics {
+            testTagsAsResourceId = true
+            testTag = "syllable:${syllable ?: "all"}"
+            selected = active
+            role = Role.Tab
+            contentDescription = if (syllable == null) "全部候选" else "拼音 $syllable"
+        }.padding(horizontal = 3.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
+        Text(syllable ?: "全部", fontSize = 14.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun CandidateCell(candidate: String, index: Int, state: KeyboardUiState,
-    onAction: (KeyboardAction) -> Unit, modifier: Modifier) {
+    onAction: (KeyboardAction) -> Unit, modifier: Modifier, expanded: Boolean = false) {
     Box(modifier.clickable { onAction(KeyboardAction.SelectCandidate(state.candidateRevision, index)) }
         .semantics {
             testTagsAsResourceId = true
             testTag = "candidate:$index"
             role = Role.Button
-        }.padding(horizontal = 12.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+        }.padding(horizontal = if (expanded) 10.dp else 12.dp, vertical = if (expanded) 10.dp else 4.dp),
+        contentAlignment = Alignment.Center) {
         Text(candidate, color = if (index == state.highlightedCandidate) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurface,
             fontWeight = if (index == state.highlightedCandidate) FontWeight.SemiBold else FontWeight.Normal,
-            fontSize = 18.sp)
+            fontSize = if (expanded) 20.sp else 18.sp,
+            maxLines = if (expanded) 2 else 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

@@ -110,6 +110,8 @@ extern "C" JNIEXPORT jobjectArray JNICALL JNI(step)(JNIEnv* env, jobject, jlong 
         if (op == 2 && key >= 0) consumed = api->select_candidate(id, key);
         if (op == 3) { api->clear_composition(id); consumed = true; }
         if (op == 4) consumed = api->commit_composition(id);
+        // Wire format: seven header strings, then (text, comment) pairs in global order.
+        // Keep this in lockstep with RimeEngine's parser; empty comments still occupy a slot.
         std::vector<std::string> data{consumed ? "1" : "0", "", "", "0", "0", "0", "1"};
         RimeResource<RimeCommit, decltype(api->free_commit)> commitOwner(api->free_commit);
         auto& commit = commitOwner.value;
@@ -135,7 +137,9 @@ extern "C" JNIEXPORT jobjectArray JNICALL JNI(step)(JNIEnv* env, jobject, jlong 
             int count = 0;
             while (api->candidate_list_next(&it)) {
                 if (count++ >= limit) { data[6] = "0"; break; }
+                // next()/end() release both pointers, so copy both before advancing.
                 data.emplace_back(it.candidate.text ? it.candidate.text : "");
+                data.emplace_back(it.candidate.comment ? it.candidate.comment : "");
             }
         }
         auto stringClass = env->FindClass("java/lang/String");

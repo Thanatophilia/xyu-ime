@@ -1,7 +1,7 @@
 schema:
   schema_id: xyu_pinyin
   name: 絮雨拼音
-  version: '1'
+  version: '2'
 switches:
   - name: ascii_mode
     reset: 0
@@ -27,6 +27,9 @@ speller:
 translator:
   dictionary: pinyin_simp
   enable_user_dict: true
+  # Emit the candidate's dictionary syllables for full input, abbreviations and sentences.
+  spelling_hints: 256
+  always_show_comments: true
   preedit_format:
     - xform/([nl])v/$1ü/
     - xform/([jqxy])v/$1u/

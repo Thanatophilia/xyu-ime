@@ -9,7 +9,7 @@ internal object BundledRimeData {
     private val checksums = mapOf(
         "default.yaml" to "aabd181c47275af3114aca55e4fcd94fe60ef4cb3554eee1e160a3ecc13f6166",
         "pinyin_simp.dict.yaml" to "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b",
-        "xyu_pinyin.schema.yaml" to "6c53486d52c2870291ca90bbd9629218d26be7c08a88d7ba44f52031f178b9f3",
+        "xyu_pinyin.schema.yaml" to "87d0e3f3164dbc182b5d5908bb914cc007db884d013f66846b20588727a9433a",
     )
 
     private fun digest(file: File): String {

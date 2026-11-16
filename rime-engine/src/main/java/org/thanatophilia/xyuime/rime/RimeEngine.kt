@@ -21,6 +21,11 @@ data class RimeOutput(
     val commitText: String = "", val preedit: String = "", val cursor: Int = 0,
     val candidates: List<String> = emptyList(), val highlightedIndex: Int = 0,
     val page: Int = 0, val isLastPage: Boolean = true, val error: String? = null,
+    /** Rime's unmodified comments (readings in the bundled pinyin schema), parallel to
+     * candidates by global index; "" means unavailable. Manually constructed/legacy
+     * outputs may leave this list empty.
+     */
+    val candidateComments: List<String> = emptyList(),
 ) {
     val hasComposition: Boolean get() = preedit.isNotEmpty()
 }
@@ -31,7 +36,7 @@ class RimeEngine(context: Context) {
         private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "RimeWorker") }
         private var initialized = false
         private var nativeClosed = true
-        private const val DATA_VERSION = "pinyin-simp-0c6861e-2"
+        private const val DATA_VERSION = "pinyin-simp-0c6861e-3"
         const val SNAPSHOT = 0
         const val PROCESS_KEY = 1
         const val SELECT_CANDIDATE = 2
@@ -75,6 +80,8 @@ class RimeEngine(context: Context) {
      * inputSessionId/sequence and candidate snapshots when its editor/composition changes.
      * key is an X11/Rime keysym for PROCESS_KEY, a zero-based global index for SELECT_CANDIDATE.
      * SNAPSHOT returns the first limit global candidates without changing the selection.
+     * candidateComments has one Rime comment per candidate, including empty placeholders;
+     * the bundled pinyin schema emits space-separated dictionary syllables when available.
      * isLastPage means this returned prefix exhausted the iterator (not menu.page_no).
      * COMMIT commits Rime's composition; raw-pinyin Return uses keysym 0xff0d instead.
      * cursor is a UTF-16 offset; commitText is drained exactly once by every request.
@@ -95,8 +102,13 @@ class RimeEngine(context: Context) {
                     owner = sessionId
                 }
                 val values = NativeRime.step(handle, operation, key, limit.coerceIn(1, 4096))
+                // JNI header + (text, comment) pairs. Never filter blank comments: doing so
+                // would associate a later candidate's reading with the wrong global index.
+                check(values.size >= 7 && (values.size - 7) % 2 == 0)
+                val count = (values.size - 7) / 2
                 RimeOutput(sessionId, serial, values[0] == "1", values[1], values[2], values[3].toInt(),
-                    values.drop(7), values[4].toInt(), values[5].toInt(), values[6] == "1")
+                    List(count) { values[7 + it * 2] }, values[4].toInt(), values[5].toInt(), values[6] == "1",
+                    candidateComments = List(count) { values[8 + it * 2] })
             } catch (_: Exception) {
                 RimeOutput(sessionId, serial, error = "中文引擎暂不可用")
             } catch (_: LinkageError) {

@@ -24,6 +24,7 @@ import android.widget.EditText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -207,7 +208,8 @@ class ImePhase3InputRegressionTest {
         val before = awaitSnapshot("shi must be composing") { it.composing == "shi" }
         node("candidate:0")
         tap("candidate_toggle")
-        val drawer = node("candidate_drawer").visibleBounds
+        node("candidate_drawer")
+        val grid = node("candidate_grid").visibleBounds
         fun assertNoOrdinaryKeys() {
             freshTree()
             listOf("q", "a", "z", "空格", "逗号", "句号", "符号键盘", "数字键盘").forEach {
@@ -215,17 +217,17 @@ class ImePhase3InputRegressionTest {
             }
         }
         assertNoOrdinaryKeys()
-        // Scope to the drawer: the separate horizontal strip can still expose candidate:0.
+        // Scope to the actual grid: the strip can expose candidate:0 and the rail also scrolls.
         val candidateSelector = By.res(java.util.regex.Pattern.compile("candidate:[0-9]+"))
-        val cells = node("candidate_drawer").findObjects(candidateSelector)
+        val cells = node("candidate_grid").findObjects(candidateSelector)
         assertTrue("Drawer must contain visible candidate cells", cells.isNotEmpty())
         val visibleBefore = cells.map { it.resourceName }.toSet()
         // Start inside a low candidate cell and drag; releasing must not become a click.
         val start = cells.map { it.visibleBounds }.filter { it.height() > 10 }
             .maxByOrNull { it.centerY() } ?: error("No usable candidate gesture target")
-        device.swipe(start.centerX(), start.centerY(), start.centerX(), drawer.top + 4, 30)
+        device.swipe(start.centerX(), start.centerY(), start.centerX(), grid.top + 4, 30)
         device.waitForIdle()
-        val visibleAfter = node("candidate_drawer").findObjects(candidateSelector)
+        val visibleAfter = node("candidate_grid").findObjects(candidateSelector)
             .map { it.resourceName }.toSet()
         assertNotEquals("Gesture must actually change visible drawer candidates", visibleBefore, visibleAfter)
         assertNoOrdinaryKeys()
@@ -237,6 +239,207 @@ class ImePhase3InputRegressionTest {
             it.text == "shi" && it.composing == null && it.actions.isEmpty()
         }
         noCandidates()
+    }
+
+    private data class DisplayedCandidate(val index: Int, val text: String)
+
+    private fun candidateText(cell: UiObject2): String = requireNotNull(
+        cell.text?.takeIf { it.isNotBlank() }
+            ?: cell.findObject(By.text(java.util.regex.Pattern.compile(".+")))?.text
+                ?.takeIf { it.isNotBlank() }
+    ) { "Candidate must expose its commit text in its cell or text child: ${cell.resourceName}" }
+
+    private fun visibleCandidates(container: String = "candidate_grid"): List<DisplayedCandidate> {
+        val root = node(container)
+        val bounds = root.visibleBounds
+        return root.findObjects(By.res(java.util.regex.Pattern.compile("candidate:[0-9]+")))
+            .filter { !it.visibleBounds.isEmpty && Rect.intersects(bounds, it.visibleBounds) }
+            .map { DisplayedCandidate(requireNotNull(it.resourceName).substringAfterLast(':').toInt(), candidateText(it)) }
+            .sortedBy { it.index }
+    }
+
+    private fun settledCandidates(container: String = "candidate_grid"): List<DisplayedCandidate> {
+        val deadline = SystemClock.uptimeMillis() + 8_000
+        var previous = emptyList<DisplayedCandidate>()
+        var stableSince = SystemClock.uptimeMillis()
+        do {
+            val current = visibleCandidates(container)
+            val now = SystemClock.uptimeMillis()
+            if (current != previous) stableSince = now
+            if (current.isNotEmpty() && now - stableSince >= 300) return current
+            previous = current
+            SystemClock.sleep(50)
+        } while (SystemClock.uptimeMillis() < deadline)
+        error("$container candidates did not settle: $previous")
+    }
+
+    /** Read real rendered labels; neither pinyin names nor their dictionary order is fixed. */
+    private fun visibleSyllableTags(): List<String> {
+        val deadline = SystemClock.uptimeMillis() + 15_000
+        var tags = emptyList<String>()
+        do {
+            val rail = node("candidate_syllables")
+            val all = requireNotNull(rail.findObject(By.res("syllable:all"))) { "Missing 全部 selector" }
+            assertTrue("All selector must be labelled 全部",
+                all.text == "全部" || all.hasObject(By.text("全部")))
+            tags = rail.findObjects(By.res(java.util.regex.Pattern.compile("syllable:.+")))
+                .filter { !it.visibleBounds.isEmpty }
+                .sortedBy { it.visibleBounds.top }
+                .map { requireNotNull(it.resourceName) }
+            assertEquals("Rail tags must be unique", tags.size, tags.toSet().size)
+            val pinyin = tags.filter { it != "syllable:all" }
+            if (pinyin.size >= 2) return pinyin
+            // The real engine may append the second group in an asynchronous prefix fetch.
+            SystemClock.sleep(100)
+        } while (SystemClock.uptimeMillis() < deadline)
+        error("n must expose at least two actual first-syllable groups; actual=$tags")
+    }
+
+    private fun assertExpandedPinyinLayout() {
+        val drawer = node("candidate_drawer").visibleBounds
+        val rail = node("candidate_syllables").visibleBounds
+        val grid = node("candidate_grid").visibleBounds
+        assertFalse("Pinyin rail must have visible bounds", rail.isEmpty)
+        assertFalse("Candidate grid must have visible bounds", grid.isEmpty)
+        assertTrue("Rail must be left of grid: rail=$rail, grid=$grid", rail.right <= grid.left)
+        assertTrue("Drawer must contain both rail and grid: drawer=$drawer, rail=$rail, grid=$grid",
+            drawer.contains(rail) && drawer.contains(grid))
+        assertTrue("Rail and grid must share vertical space", rail.top < grid.bottom && grid.top < rail.bottom)
+        val groups = node("candidate_syllables")
+            .findObjects(By.res(java.util.regex.Pattern.compile("syllable:.+")))
+            .filter { !it.visibleBounds.isEmpty }
+            .sortedBy { it.visibleBounds.top }
+        assertTrue("Pinyin groups must form a vertical rail", groups.zipWithNext().all { (a, b) ->
+            a.visibleBounds.bottom <= b.visibleBounds.top &&
+                a.visibleBounds.left < b.visibleBounds.right && b.visibleBounds.left < a.visibleBounds.right
+        })
+        freshTree()
+        assertTrue("Expanded drawer must replace all ordinary keys, including the seven bottom controls",
+            node("keyboard_surface").findObjects(By.res(java.util.regex.Pattern.compile("key:.+"))).isEmpty())
+    }
+
+    private fun selectSyllable(tag: String): List<DisplayedCandidate> {
+        requireNotNull(node("candidate_syllables").findObject(By.res(tag))) { "Missing rail group $tag" }.click()
+        device.waitForIdle()
+        return settledCandidates()
+    }
+
+    /** Recover the unfiltered prefix even if a filter change retained the grid's scroll offset. */
+    private fun allCandidatesAtTop(): List<DisplayedCandidate> {
+        selectSyllable("syllable:all")
+        repeat(16) {
+            val candidates = settledCandidates()
+            if (candidates.any { it.index == 0 }) return candidates
+            node("candidate_grid").scroll(Direction.UP, 0.8f)
+        }
+        error("All candidates must restore global candidate:0 at the grid's start")
+    }
+
+    /** Verify filtered identities against the real All list, including items below the first viewport. */
+    private fun assertCandidatesInAll(expected: List<DisplayedCandidate>) {
+        val remaining = expected.associateBy { it.index }.toMutableMap()
+        assertEquals("A filtered viewport must not reuse global indices", expected.size, remaining.size)
+        allCandidatesAtTop()
+        repeat(32) {
+            settledCandidates().forEach { actual ->
+                remaining[actual.index]?.let { wanted ->
+                    assertEquals("Filtered candidate:${actual.index} changed its global text", wanted.text, actual.text)
+                    remaining.remove(actual.index)
+                }
+            }
+            if (remaining.isEmpty()) return
+            node("candidate_grid").scroll(Direction.DOWN, 0.75f)
+        }
+        fail("Filtered candidates must exist with the same indices and text in All; missing=$remaining")
+    }
+
+    @Test fun expandedPinyinFilterKeepsGlobalIndicesAndCommitsDisplayedCandidate() = withChineseEditor {
+        typeLetters("n")
+        val before = awaitSnapshot("n must be composing before pinyin filtering") {
+            it.composing?.replace(" ", "") == "n" && it.actions.isEmpty()
+        }
+        node("candidate:0")
+        tap("candidate_toggle")
+        settledCandidates()
+        assertExpandedPinyinLayout()
+        val groups = visibleSyllableTags()
+        val allBefore = settledCandidates()
+        val firstGroup = selectSyllable(groups.first())
+        val otherTag = groups[1] // Distinct noninitial real label; never assume na/ni/ne ordering.
+        val filtered = selectSyllable(otherTag)
+        val firstIndices = firstGroup.map { it.index }.toSet()
+        val filteredIndices = filtered.map { it.index }.toSet()
+        assertTrue("Different first-syllable groups must not reuse candidate indices: $groups",
+            firstIndices.intersect(filteredIndices).isEmpty())
+        assertNotEquals("Filtering must change the displayed original indices",
+            allBefore.map { it.index }.toSet(), filteredIndices)
+        assertEquals("Choosing pinyin must not commit or alter the input", before, snapshot())
+        assertExpandedPinyinLayout()
+        floatingScreenshot("phase3-expanded-pinyin-filtered")
+
+        // Compare every visible filtered item with the unfiltered engine-order list. A UI
+        // that renumbers its filtered items cannot pass even if its click handler is correct.
+        assertCandidatesInAll(firstGroup + filtered)
+        val restored = allCandidatesAtTop()
+        assertEquals("All must restore the original candidate prefix", allBefore, restored)
+        val selected = selectSyllable(otherTag)
+        val target = filtered.firstOrNull { it.index > 0 && it in selected }
+            ?: error("A noninitial pinyin group must expose a nonzero original candidate index: $filtered")
+        val cell = requireNotNull(node("candidate_grid").findObject(By.res("candidate:${target.index}")))
+        val commitText = candidateText(cell) // Read the actual clicked cell/text child, not an expected dictionary word.
+        assertEquals("Restored filter must retain the same candidate text", target.text, commitText)
+        cell.click() // Scope to grid: the unchanged top strip can have the same global tag.
+        device.waitForIdle()
+        awaitSnapshot("Filtered candidate:${target.index} must commit its displayed text '$commitText'") {
+            it.text == commitText && it.composing == null && it.actions.isEmpty()
+        }
+        noCandidates()
+        noFloatingPreedit()
+        node("key:q")
+    }
+
+    @Test fun expandedPinyinAllRestoresCandidatesWithoutMovingHeaderKeyboardOrEditor() = withChineseEditor {
+        typeLetters("n")
+        val before = awaitSnapshot("n must be composing before opening the pinyin rail") {
+            it.composing?.replace(" ", "") == "n" && it.actions.isEmpty()
+        }
+        val editorBefore = settledEditorGeometry()
+        val keyboardBefore = Rect(node("keyboard_surface").visibleBounds)
+        val headerBefore = Rect(node("candidate_strip").visibleBounds)
+        val headerCandidates = settledCandidates("candidate_strip")
+        val qBefore = Rect(node("key:q").visibleBounds)
+        val spaceBefore = Rect(node("key:空格").visibleBounds)
+        tap("candidate_toggle")
+        val allBefore = settledCandidates()
+        val groups = visibleSyllableTags()
+        val drawerBefore = Rect(node("candidate_drawer").visibleBounds)
+        val railBefore = Rect(node("candidate_syllables").visibleBounds)
+        val gridBefore = Rect(node("candidate_grid").visibleBounds)
+        fun assertUnchangedLayout() {
+            assertExpandedPinyinLayout()
+            assertEquals("Filtering must preserve editor bounds, insets and focus", editorBefore, settledEditorGeometry())
+            assertEquals("Filtering must preserve keyboard bounds", keyboardBefore, node("keyboard_surface").visibleBounds)
+            assertEquals("Filtering must preserve header bounds", headerBefore, node("candidate_strip").visibleBounds)
+            assertEquals("Top strip must keep the full unfiltered prefix", headerCandidates, settledCandidates("candidate_strip"))
+            assertEquals("Filtering must preserve drawer bounds", drawerBefore, node("candidate_drawer").visibleBounds)
+            assertEquals("Filtering must preserve rail bounds", railBefore, node("candidate_syllables").visibleBounds)
+            assertEquals("Filtering must preserve grid bounds", gridBefore, node("candidate_grid").visibleBounds)
+            assertEquals("Filtering must preserve composition and editor actions", before, snapshot())
+        }
+        assertUnchangedLayout()
+        floatingScreenshot("phase3-expanded-pinyin-all")
+        selectSyllable(groups.first())
+        assertUnchangedLayout()
+        val filtered = selectSyllable(groups[1])
+        assertNotEquals("A distinct pinyin filter must change the grid", allBefore, filtered)
+        assertUnchangedLayout()
+        floatingScreenshot("phase3-expanded-pinyin-layout-filtered")
+        assertEquals("All must restore the original candidate prefix", allBefore, allCandidatesAtTop())
+        assertUnchangedLayout()
+        floatingScreenshot("phase3-expanded-pinyin-all-restored")
+        tap("candidate_toggle")
+        assertEquals("Closing drawer must restore letter bounds", qBefore, node("key:q").visibleBounds)
+        assertEquals("Closing drawer must restore bottom-row bounds", spaceBefore, node("key:空格").visibleBounds)
     }
 
     /** All coordinates come from the app's real view/window, on its UI thread. */
