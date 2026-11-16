@@ -1,10 +1,10 @@
 # 阶段三候选版手机验收
 
-状态：**云端回归验证完成；用户设备验收待完成。** 不得据模拟器结果宣布阶段三实机验收通过。候选版本 **0.3.46（46）**，代码提交 `a76d950f79ac8b788045ffe3691447a7dd43756f`，[Actions #46](https://github.com/Thanatophilia/xyu-ime/actions/runs/43918514208) 全部成功。
+状态：**云端回归验证完成；用户设备验收待完成。** 不得据模拟器结果宣布阶段三实机验收通过。候选版本 **0.3.47（47）**，代码提交 `df6c9119889594b15efdde6a26108aaaaf550a0a`，[Actions #47](https://github.com/Thanatophilia/xyu-ime/actions/runs/43929414185) 全部成功。
 
-APK SHA256：`cba8b71b582a68ce9faadd4279a5e91f0f2a599cc3abf4b5c3ac395040ae7034`。最新报告为 app JVM 21、Rime JVM 部署事务测试入口 1、app Android 36 14、Rime Android 36 4，合计 40 passed、0 skipped、0 failures；可用 JUnit XML 均为 0 errors（Rime JVM 计数来自 Gradle HTML，artifact 未收录其 XML）。Lint 0 errors、13 warnings、4 hints。签名 v2、ZIP 16 KB 对齐、双 ABI 与各原生库 ELF LOAD 16 KB 对齐均通过；下载后校验和及原生 verifier 复验通过。详情见 README。
+APK SHA256：`a1fac2fa4c69a7b999b5300aa1d45f08aa14da0d407de1486d8065e6e141ea14`。报告为 app JVM 21、Rime JVM 部署事务测试入口 1、app Android 36 15、Rime Android 36 4，合计 41 passed、0 skipped、0 failures；可用 JUnit XML 均为 0 errors（Rime JVM 计数来自 Gradle HTML，artifact 未收录其 XML）。Lint 0 errors、13 warnings、4 hints。签名 v2、ZIP 16 KB 对齐、双 ABI 与各原生库 ELF LOAD 16 KB 对齐均通过；下载后校验和及原生 verifier 复验通过。详情见 README。
 
-**0.3.45 不作为交付包**：其额外 armeabi-v7a/x86 库导致原生验证失败，旧流水线 tee 掩盖了失败。0.3.46 已修复 ABI 过滤和失败传播。原始 #46 artifact 的 READ-ME.md 是构建时旧文档，请使用本清单；BUILD.txt、SHA256SUMS.txt 与 APK 版本不受影响。
+**0.3.47 修正候选栏空间**：候选栏固定在字母区上方并常驻预留高度，拼音出现时只替换栏内内容，不压缩或移动字母键和底部七键。新增真实设备回归测试比较输入 `nihao` 前后的 `q` 与空格键坐标，并断言候选栏位于字母区上方。**0.3.45 不作为交付包**（额外 armeabi-v7a/x86 库导致原生验证失败，旧流水线 tee 掩盖失败）；0.3.46 为旧布局版，均不应作为本轮安装包。
 
 ## 安装与数据
 
@@ -15,7 +15,7 @@ APK SHA256：`cba8b71b582a68ce9faadd4279a5e91f0f2a599cc3abf4b5c3ac395040ae7034`�
 
 ## 中文、候选和回车
 
-- 输入 nihao，检查预编辑；点击“你好”以及空格选词，无拼音残留或重复提交。
+- 输入 nihao，检查预编辑；候选栏须出现在字母键上方，出现前后字母键和底部七键不得位移或压缩；点击“你好”以及空格选词，无拼音残留或重复提交。
 - 输入 shi，横滑候选栏浏览更多候选；右侧展开按钮不随滚动移动。没有上一页／下一页按钮。
 - 展开候选抽屉须向下替换整个键盘，包括全部底部七键；普通按键不可见、不可点击。候选页纵向滑动不误选词，点击选词正确；收回恢复普通键盘。
 - 快速反向展开／收回、同一组合反复浏览、改变拼音、结束组合，检查动画、滚动位置与重置。

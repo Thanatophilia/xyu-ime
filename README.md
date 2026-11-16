@@ -41,9 +41,9 @@
 
 ## 第三阶段 · 云端完成，用户设备待验收
 
-- 候选交付版本：**0.3.46**（versionCode 46），代码提交 [`a76d950`](https://github.com/Thanatophilia/xyu-ime/commit/a76d950f79ac8b788045ffe3691447a7dd43756f)，Actions [#46](https://github.com/Thanatophilia/xyu-ime/actions/runs/43918514208) 全部门禁成功。
-- APK：[xyu-ime-0.3.46.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43918514208)；SHA256：`cba8b71b582a68ce9faadd4279a5e91f0f2a599cc3abf4b5c3ac395040ae7034`，下载后与同包校验和复核一致。
-- 最新实际测试报告：app JVM **21 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **14 passed**；Rime Android 36 **4 passed**；合计 **40 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 13 warnings / 4 hints**。
+- 候选交付版本：**0.3.47**（versionCode 47），代码提交 [`df6c911`](https://github.com/Thanatophilia/xyu-ime/commit/df6c9119889594b15efdde6a26108aaaaf550a0a)，Actions [#47](https://github.com/Thanatophilia/xyu-ime/actions/runs/43929414185) 全部门禁成功。候选栏固定在字母区上方并常驻预留高度，拼音出现时不再压缩或移动字母键与底部七键。
+- APK：[xyu-ime-0.3.47.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43929414185)；SHA256：`a1fac2fa4c69a7b999b5300aa1d45f08aa14da0d407de1486d8065e6e141ea14`，下载后与同包校验和复核一致。
+- 最新实际测试报告：app JVM **21 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **15 passed**；Rime Android 36 **4 passed**；合计 **41 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 13 warnings / 4 hints**。
 - 交付门禁证据：`apksigner verify --verbose --print-certs` 输出 **Verifies**、v2 **true**；固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。`zipalign -c -P 16 -v 4` 输出 **Verification successful**；`verify-apk.py` 在 CI 和下载后本地复验均通过，仅含 **arm64-v8a / x86_64**，4 个原生库各 3 个 ELF LOAD 段满足 16 KB 对齐，Rime 资源齐全。
 - 已撤销 0.3.45 的交付结论：该包混入 armeabi-v7a/x86，且 verifier 失败被 tee 掩盖。0.3.46 已限定双 ABI，并直接重定向验证输出；CI 使用 `bash -e`，原生验证、对齐或签名失败均会中止步骤。0.3.46 原始 artifact 的 READ-ME.md 仍含旧版说明，请以本页及最新手机验收清单为准；APK、BUILD.txt 与校验和均为 0.3.46。
 - 状态：**云端完成；用户设备验收待完成**。安装包保留候选抽屉展开时隐藏普通键和底部七键的行为。
