@@ -24,7 +24,6 @@ import android.widget.EditText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
-import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -34,6 +33,9 @@ import org.junit.runner.RunWith
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.ceil
+
+/** Local page size of the expanded drawer. Paging never leaves the app's own filtering. */
+private const val CANDIDATE_PAGE_SIZE = 9
 
 /** Real IME tests. The editor/action recorder exists only in the instrumentation APK. */
 @RunWith(AndroidJUnit4::class)
@@ -221,15 +223,16 @@ class ImePhase3InputRegressionTest {
         val candidateSelector = By.res(java.util.regex.Pattern.compile("candidate:[0-9]+"))
         val cells = node("candidate_grid").findObjects(candidateSelector)
         assertTrue("Drawer must contain visible candidate cells", cells.isNotEmpty())
-        val visibleBefore = cells.map { it.resourceName }.toSet()
         // Start inside a low candidate cell and drag; releasing must not become a click.
+        // Candidates move only through the page buttons, so a drag need not change them:
+        // what must hold is that the drawer stays expanded and nothing is selected.
         val start = cells.map { it.visibleBounds }.filter { it.height() > 10 }
             .maxByOrNull { it.centerY() } ?: error("No usable candidate gesture target")
         device.swipe(start.centerX(), start.centerY(), start.centerX(), grid.top + 4, 30)
         device.waitForIdle()
-        val visibleAfter = node("candidate_grid").findObjects(candidateSelector)
-            .map { it.resourceName }.toSet()
-        assertNotEquals("Gesture must actually change visible drawer candidates", visibleBefore, visibleAfter)
+        freshTree()
+        assertNotNull("Dragging must leave the drawer expanded",
+            device.findObject(By.res("candidate_drawer").pkg(pkg)))
         assertNoOrdinaryKeys()
         assertEquals("Scrolling must neither commit nor alter composition", before, snapshot())
         tap("candidate_toggle")
@@ -324,33 +327,58 @@ class ImePhase3InputRegressionTest {
         return settledCandidates()
     }
 
-    /** Recover the unfiltered prefix even if a filter change retained the grid's scroll offset. */
-    private fun allCandidatesAtTop(): List<DisplayedCandidate> {
-        selectSyllable("syllable:all")
-        repeat(16) {
-            val candidates = settledCandidates()
-            if (candidates.any { it.index == 0 }) return candidates
-            node("candidate_grid").scroll(Direction.UP, 0.8f)
+    /** Paging is local UI state: at the first page, page-up cannot change anything. */
+    private fun firstLocalPage(): List<DisplayedCandidate> {
+        var current = settledCandidates()
+        repeat(512) {
+            tap("candidate_tools_page_up")
+            val previous = current
+            current = settledCandidates()
+            if (current == previous) return current
         }
-        error("All candidates must restore global candidate:0 at the grid's start")
+        error("Page-up must reach the first local page")
     }
 
-    /** Verify filtered identities against the real All list, including items below the first viewport. */
-    private fun assertCandidatesInAll(expected: List<DisplayedCandidate>) {
-        val remaining = expected.associateBy { it.index }.toMutableMap()
-        assertEquals("A filtered viewport must not reuse global indices", expected.size, remaining.size)
-        allCandidatesAtTop()
-        repeat(32) {
-            settledCandidates().forEach { actual ->
-                remaining[actual.index]?.let { wanted ->
-                    assertEquals("Filtered candidate:${actual.index} changed its global text", wanted.text, actual.text)
-                    remaining.remove(actual.index)
-                }
+    /** Walk the real 下翻页 button; stop at the last local page or after the page bound. */
+    private fun collectLocalPages(maxPages: Int = 24): List<List<DisplayedCandidate>> {
+        val pages = mutableListOf<List<DisplayedCandidate>>()
+        var current = firstLocalPage()
+        repeat(maxPages) {
+            pages.add(current)
+            if (it == maxPages - 1) return pages
+            tap("candidate_tools_page_down")
+            var next = settledCandidates()
+            if (next == current) {
+                // The last local page may have just asked the engine for more candidates.
+                SystemClock.sleep(400)
+                next = settledCandidates()
+                if (next == current) return pages
             }
-            if (remaining.isEmpty()) return
-            node("candidate_grid").scroll(Direction.DOWN, 0.75f)
+            current = next
         }
-        fail("Filtered candidates must exist with the same indices and text in All; missing=$remaining")
+        return pages
+    }
+
+    /** Pages must show disjoint slices of the loaded prefix, never a renumbered list. */
+    private fun assertDistinctPages(pages: List<List<DisplayedCandidate>>) {
+        assertTrue("Every local page must show 1..9 candidates",
+            pages.isNotEmpty() && pages.all { it.size in 1..CANDIDATE_PAGE_SIZE })
+        val indices = pages.flatten().map { it.index }
+        assertEquals("Local pages must not repeat a global candidate index", indices.size, indices.toSet().size)
+    }
+
+    /** Every filtered item keeps its own global index and text inside All's local pages. */
+    private fun assertAllContains(pages: List<List<DisplayedCandidate>>, expected: List<DisplayedCandidate>) {
+        val wanted = expected.associateBy { it.index }
+        assertEquals("A filtered viewport must not reuse global indices", expected.size, wanted.size)
+        assertDistinctPages(pages)
+        val all = pages.flatten()
+        wanted.forEach { (index, item) ->
+            val actual = requireNotNull(all.firstOrNull { it.index == index }) {
+                "Filtered candidate:$index is missing from All; saw=${all.map { it.index }}"
+            }
+            assertEquals("Filtered candidate:$index changed its global text", item.text, actual.text)
+        }
     }
 
     @Test fun expandedPinyinFilterKeepsGlobalIndicesAndCommitsDisplayedCandidate() = withChineseEditor {
@@ -377,11 +405,13 @@ class ImePhase3InputRegressionTest {
         assertExpandedPinyinLayout()
         floatingScreenshot("phase3-expanded-pinyin-filtered")
 
-        // Compare every visible filtered item with the unfiltered engine-order list. A UI
+        // Compare every visible filtered item with the locally paged unfiltered list. A UI
         // that renumbers its filtered items cannot pass even if its click handler is correct.
-        assertCandidatesInAll(firstGroup + filtered)
-        val restored = allCandidatesAtTop()
-        assertEquals("All must restore the original candidate prefix", allBefore, restored)
+        selectSyllable("syllable:all")
+        val allPages = collectLocalPages(maxPages =
+            ((firstGroup + filtered).maxOf { it.index } / CANDIDATE_PAGE_SIZE + 1).coerceAtMost(512))
+        assertAllContains(allPages, firstGroup + filtered)
+        assertEquals("All must restore the original candidate prefix", allBefore, firstLocalPage())
         val selected = selectSyllable(otherTag)
         val target = filtered.firstOrNull { it.index > 0 && it in selected }
             ?: error("A noninitial pinyin group must expose a nonzero original candidate index: $filtered")
@@ -434,7 +464,8 @@ class ImePhase3InputRegressionTest {
         assertNotEquals("A distinct pinyin filter must change the grid", allBefore, filtered)
         assertUnchangedLayout()
         floatingScreenshot("phase3-expanded-pinyin-layout-filtered")
-        assertEquals("All must restore the original candidate prefix", allBefore, allCandidatesAtTop())
+        selectSyllable("syllable:all")
+        assertEquals("All must restore the original candidate prefix", allBefore, firstLocalPage())
         assertUnchangedLayout()
         floatingScreenshot("phase3-expanded-pinyin-all-restored")
         tap("candidate_toggle")
@@ -742,10 +773,21 @@ class ImePhase3InputRegressionTest {
         assertTrue("Right rail must expose page down", tools.hasObject(By.res("candidate_tools_page_down")))
         assertTrue("Right rail must expose commit", tools.hasObject(By.res("candidate_enter")))
         assertEquals("niha", snapshot().composing?.replace(" ", ""))
+        // Paging edits only what this view shows: never the code, never the editor.
+        val firstPage = settledCandidates()
+        tap("candidate_tools_page_down")
+        assertEquals("Page-down must not change the composition", "niha",
+            snapshot().composing?.replace(" ", ""))
+        tap("candidate_tools_page_up")
+        assertEquals("Page-up must restore the first local page", firstPage, settledCandidates())
+        assertEquals("niha", snapshot().composing?.replace(" ", ""))
+        // Commit sends the real highlighted candidate; never predict the dictionary entry.
         tap("candidate_enter")
-        awaitSnapshot("Candidate enter commits text without sending") {
-            it.text == "nihaoniha" && it.composing == null && it.actions.isEmpty()
+        val committed = awaitSnapshot("Candidate enter commits a candidate without sending") {
+            it.text.startsWith("nihao") && it.composing == null && it.actions.isEmpty()
         }
+        assertTrue("Candidate enter must commit text after the seeded prefix: '${committed.text}'",
+            committed.text.length > "nihao".length)
         noCandidates()
         noFloatingPreedit()
         assertEquals(geometry, settledEditorGeometry())
@@ -754,10 +796,10 @@ class ImePhase3InputRegressionTest {
         tap("candidate_toggle")
         tap("candidate_delete")
         awaitSnapshot("Deleting the last code ends the composition without deleting text") {
-            it.text == "nihaoniha" && it.composing == null && it.actions.isEmpty()
+            it.text == committed.text && it.composing == null && it.actions.isEmpty()
         }
         SystemClock.sleep(300)
-        assertEquals("nihaoniha", snapshot().text)
+        assertEquals(committed.text, snapshot().text)
         noCandidates()
         assertEquals(geometry, settledEditorGeometry())
     }
@@ -771,25 +813,35 @@ class ImePhase3InputRegressionTest {
             it.text.codePointCount(0, it.text.length) > 1
         })
         tap("candidate_type")
-        val single = settledCandidates()
-        assertTrue("Single mode contains one Unicode code point", single.all {
-            it.text.codePointCount(0, it.text.length) == 1
+        val singlePages = collectLocalPages(maxPages = 2)
+        assertTrue("Single mode only offers one Unicode code point", singlePages.all { page ->
+            page.all { it.text.codePointCount(0, it.text.length) == 1 }
         })
-        assertTrue("Single mode is a strict subset of All", all.containsAll(single) &&
-            single.size < all.size)
         assertEquals("Filtering must not commit text", before, snapshot())
         floatingScreenshot("phase3-candidate-tools-single")
         tap("candidate_type")
-        assertEquals("The low-left cycle returns to All and never shows phrases-only", all, settledCandidates())
-        // Right-rail paging really advances the Rime page and keeps the composition.
-        val pageOne = settledCandidates()
-        tap("candidate_tools_page_down")
-        val pageTwo = settledCandidates()
-        assertNotEquals("Page-down must show a different candidate page", pageOne, pageTwo)
-        assertTrue("Paging keeps the composition", before == snapshot())
-        tap("candidate_tools_page_up")
-        assertEquals("Page-up must restore the previous page", pageOne, settledCandidates())
-        assertEquals("Returning a page keeps the composition", before, snapshot())
+        assertEquals("The low-left cycle returns to All and never shows phrases-only", all, firstLocalPage())
+        // Subset identity is checked against every All page this view can page through.
+        val allPages = collectLocalPages(maxPages =
+            (singlePages.flatten().maxOf { it.index } / CANDIDATE_PAGE_SIZE + 1).coerceAtMost(512))
+        assertAllContains(allPages, singlePages.flatten())
+        assertEquals("All must restore its first local page", all, firstLocalPage())
+        assertEquals("Paging keeps the composition", before, snapshot())
+        // A filter chosen while All sits on a later page must still agree with the walked pages.
+        val seen = allPages.flatten().associateBy { it.index }
+        tap("candidate_type")
+        val singleAfterPaging = settledCandidates()
+        assertTrue("Single mode must still show one-codepoint items after All paging",
+            singleAfterPaging.isNotEmpty() && singleAfterPaging.all {
+                it.text.codePointCount(0, it.text.length) == 1
+            })
+        singleAfterPaging.forEach { item ->
+            val actual = seen[item.index]
+            assertNotNull("Single candidate:${item.index} must exist in the walked All pages", actual)
+            assertEquals("Single candidate:${item.index} changed its All text", item.text, actual?.text)
+        }
+        tap("candidate_type")
+        assertEquals("All is restored after the paged filter round trip", all, firstLocalPage())
         node("candidate_toggle")
     }
 

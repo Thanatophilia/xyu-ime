@@ -169,7 +169,6 @@ sealed interface KeyboardAction {
     // Candidate-page actions are scoped to the input session; repeating delete never falls
     // through to deleting committed editor text once the composition has ended.
     data class CandidateBackspace(val session: Int) : KeyboardAction
-    data class CandidatePage(val session: Int, val forward: Boolean) : KeyboardAction
     data class CandidateCommit(val session: Int) : KeyboardAction
     data object ToggleCandidates : KeyboardAction
     data object NextLanguage : KeyboardAction
@@ -188,8 +187,10 @@ enum class CursorDirection { Left, Right, Up, Down, Home, End }
 
 private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
 
-/** Candidate-page paging matches the Rime menu page size used by the bundled schema. */
-private const val PAGE_SIZE = 9
+/** How many filtered candidates one local page shows. Paging is a display concern only:
+ * the view owns this page index and never asks Rime to move its own menu page.
+ */
+private const val CANDIDATE_PAGE_SIZE = 9
 
 private val XyuLightColors = lightColorScheme(
     primary = Color(0xFF536C66),
@@ -480,17 +481,22 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 }
             }
     }
-    // Request subsequent native prefixes when the filtered view approaches its loaded end.
+    // Paging belongs to the display: this view owns the local page index over its own
+    // filtered list, resets it on every revision/filter change, and never pages Rime.
+    var page by remember(state.candidateRevision, selectedSyllable, wordFilter) { mutableStateOf(0) }
+    val pageCount = if (visible.isEmpty()) 1
+        else (visible.size + CANDIDATE_PAGE_SIZE - 1) / CANDIDATE_PAGE_SIZE
+    val currentPage = page.coerceIn(0, pageCount - 1)
+    val paged = visible.drop(currentPage * CANDIDATE_PAGE_SIZE).take(CANDIDATE_PAGE_SIZE)
+    // Showing the last local page asks the engine for more candidates; it never pages it.
     // An empty filtered page is not proof there are no matches in later native candidates.
-    LaunchedEffect(scroll, visible.size, state.candidates.size, state.loadingCandidates, selectedSyllable, wordFilter) {
-        snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
-            .distinctUntilChanged().collect { last ->
-                if ((visible.isEmpty() || last >= visible.size - 8) &&
-                    current.hasMoreCandidates && !current.loadingCandidates) {
-                    action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
-                }
-            }
+    LaunchedEffect(currentPage, pageCount, state.candidates.size, state.hasMoreCandidates,
+        state.loadingCandidates, state.candidateRevision, selectedSyllable, wordFilter) {
+        if (currentPage >= pageCount - 1 && current.hasMoreCandidates && !current.loadingCandidates)
+            action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
     }
+    // A new local page always starts at its first cell; never inherit the previous offset.
+    LaunchedEffect(currentPage, visible.size, scroll) { scroll.scrollToItem(0) }
     Row(modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
         Column(Modifier.width(64.dp).fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
@@ -524,11 +530,6 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 val padding = with(density) { 20.dp.toPx() }
                 ceil((textWidth + padding) / columnWidth).toInt().coerceIn(minOf(2, columns), columns)
             }
-            val pageSize = PAGE_SIZE
-            val pageCount = if (visible.isEmpty()) 1 else (visible.size + pageSize - 1) / pageSize
-            val page = (state.highlightedCandidate / pageSize)
-                .coerceIn(0, pageCount - 1)
-            val paged = visible.drop(page * pageSize).take(pageSize)
             LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
                 modifier = Modifier.fillMaxSize().semantics {
                     testTagsAsResourceId = true
@@ -562,13 +563,17 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 Modifier.fillMaxWidth().weight(1f), small = true, repeat = true,
                 customTag = "candidate_delete", icon = "delete",
                 onClick = { onAction(KeyboardAction.CandidateBackspace(state.candidateSession)) })
-            KeyFace("上页", "上一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
+            KeyFace("上翻页", "上一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
                 small = true, customTag = "candidate_tools_page_up",
-                onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = false)) })
-            KeyFace("下页", "下一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
+                onClick = { if (currentPage > 0) page = currentPage - 1 })
+            KeyFace("下翻页", "下一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
                 small = true, customTag = "candidate_tools_page_down",
-                onClick = { onAction(KeyboardAction.CandidatePage(state.candidateSession, forward = true)) })
-            KeyFace(state.actionLabel, "回车：${state.actionLabel}（仅提交候选，不发送）", fontScale, shape,
+                onClick = {
+                    if (currentPage < pageCount - 1) page = currentPage + 1
+                    else if (current.hasMoreCandidates && !current.loadingCandidates)
+                        action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+                })
+            KeyFace("回车", "回车：${state.actionLabel}（仅提交候选，不发送）", fontScale, shape,
                 Modifier.fillMaxWidth().weight(1f), small = true, active = true, customTag = "candidate_enter",
                 onClick = { onAction(KeyboardAction.CandidateCommit(state.candidateSession)) })
         }

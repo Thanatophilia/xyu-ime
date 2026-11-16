@@ -402,12 +402,11 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     private fun candidateToolSession(action: KeyboardAction): Int? = when (action) {
         is KeyboardAction.CandidateBackspace -> action.session
-        is KeyboardAction.CandidatePage -> action.session
         is KeyboardAction.CandidateCommit -> action.session
         else -> null
     }
 
-    /** Delete and paging stay available while a composition exists, even after collapsing. */
+    /** Delete stays scoped to a live composition; commit also requires the expanded drawer. */
     private fun candidateToolValid(action: KeyboardAction, session: Int): Boolean {
         val scopedToDrawer = action is KeyboardAction.CandidateCommit
         return session == chineseSession.epoch && chinese && composing &&
@@ -418,7 +417,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         candidateToolSession(action)?.let { session ->
             if (!candidateToolValid(action, session)) return
             // A held delete can produce events faster than native Rime replies. Keep
-            // at most one pending repeat; paging and commit are single-shot.
+            // at most one pending repeat; commit is single-shot.
             if (action is KeyboardAction.CandidateBackspace) {
                 if (actions.any { candidateToolSession(it) != null }) return
             } else {
@@ -437,15 +436,12 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         candidateToolSession(action)?.let { session ->
             if (candidateToolValid(action, session)) when (action) {
                 is KeyboardAction.CandidateBackspace -> requestRime(1, 0xff08)
-                is KeyboardAction.CandidatePage -> {
-                    val page = keyboardState.highlightedCandidate / ChineseSession.PAGE_SIZE
-                    requestRime(1, if (action.forward) 0xff56 else 0xff55,
-                        after = {
-                            if (keyboardState.highlightedCandidate / ChineseSession.PAGE_SIZE != page)
-                                requestRime(more = true)
-                        })
+                is KeyboardAction.CandidateCommit -> {
+                    // A stale or hidden highlight must never commit an index Rime no longer
+                    // has: the composition then stays untouched instead of committing wrong text.
+                    val index = keyboardState.highlightedCandidate
+                    if (index in keyboardState.candidates.indices) requestRime(2, index)
                 }
-                is KeyboardAction.CandidateCommit -> requestRime(2, keyboardState.highlightedCandidate)
                 else -> Unit
             }
             // A stale held press must never fall through to ordinary editor deletion.
@@ -533,7 +529,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             KeyboardAction.NextLanguage, KeyboardAction.ToggleCandidates,
             is KeyboardAction.SelectCandidate, is KeyboardAction.LoadMoreCandidates,
             is KeyboardAction.SetChinese,
-            is KeyboardAction.CandidateBackspace, is KeyboardAction.CandidatePage,
+            is KeyboardAction.CandidateBackspace,
             is KeyboardAction.CandidateCommit -> Unit
             KeyboardAction.PickInputMethod -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
         }

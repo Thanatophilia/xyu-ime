@@ -24,8 +24,5 @@ internal class ChineseSession {
         const val INITIAL_LIMIT = 64
         // The current wrapper caps its read-only candidate iterator at this limit.
         const val MAX_LIMIT = 4096
-
-        /** Matches the bundled schema menu.page_size so paging buttons pace page-aligned. */
-        const val PAGE_SIZE = 9
     }
 }
