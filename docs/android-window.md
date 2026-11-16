@@ -13,7 +13,7 @@ realme RMX3852，Android 16 / API 36，当前逻辑 1080×2376 px / 480 dpi（�
 - 输入视图宽度 MATCH_PARENT、高度 WRAP_CONTENT。Compose 限制首选高度并服从实际测量约束；不把输入视图设为铺满屏幕。
 - 键盘子树不调用 imePadding，也不重复累加导航栏高度，不手动设置窗口 y 偏移或硬编码抬高值。
 - 首版竖屏内容首选约 268dp，横屏约 180dp；两者都是键盘内容尺寸，不含系统管理的底栏。高度不足时压缩键盘内部布局。
-- Compose 的 LocalConfiguration/测量约束响应旋转与尺寸变化；系统窗口边距保留框架处理，不替换 Decor 的 WindowInsets 监听器。
+- Compose 的 LocalConfiguration/测量约束响应旋转与尺寸变化；不替换 Decor 的 WindowInsets 监听器。在键盘内容外侧用 windowInsetsPadding 消费一次剩余 systemBars 与 displayCutout 的水平/底部并集。该并集包含 Android 16 的 IME caption 底栏，使用 max 合并不做相加，已经由祖先消费的边距不会重复添加。
 - 明确提供 LifecycleOwner、SavedStateRegistryOwner、ViewModelStoreOwner，处理显示/隐藏与销毁。编辑框切换或键盘隐藏会取消旧手势。
 - onEvaluateFullscreenMode 返回 false，横屏保持普通键盘。
 - 保留默认 onComputeInsets，向系统报告输入区覆盖关系。该方法是报告输出，不是“抬高请求”的输入回调。

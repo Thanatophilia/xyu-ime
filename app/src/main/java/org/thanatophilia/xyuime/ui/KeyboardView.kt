@@ -24,6 +24,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -172,6 +179,12 @@ fun XyuKeyboard(
         BoxWithConstraints(
             modifier = modifier
                 .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                // Android 15/16 IME navigation controls may overlay the decor content.
+                // Consume the real remaining system inset once, outside the key heights.
+                // systemBars includes the IME caption/footer bar; union uses max, not sum.
+                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
                 .heightIn(max = maximumHeight),
         ) {
             // The IME host can measure its first pass with an unbounded height. A fixed preferred

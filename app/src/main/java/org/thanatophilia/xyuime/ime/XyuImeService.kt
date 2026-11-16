@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -70,8 +71,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         installWindowOwners()
         composeView?.disposeComposition()
         val view = ComposeView(this).apply {
-            // Theme.InputMethod and the framework own the navigation/raised footer.
-            // Do not pad this view by its own IME inset or repeat consumed system insets.
+            // The framework owns window positioning. Compose consumes remaining system
+            // footer/cutout insets once, never its own IME inset or an OEM private value.
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             )
@@ -112,6 +113,10 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     override fun onWindowShown() {
         super.onWindowShown()
+        window?.window?.let { imeWindow ->
+            WindowCompat.getInsetsController(imeWindow, imeWindow.decorView).isAppearanceLightNavigationBars =
+                resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK != Configuration.UI_MODE_NIGHT_YES
+        }
         if (!registry.currentState.isAtLeast(Lifecycle.State.STARTED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         if (!registry.currentState.isAtLeast(Lifecycle.State.RESUMED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
