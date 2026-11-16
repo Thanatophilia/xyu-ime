@@ -5,7 +5,25 @@ import android.view.inputmethod.EditorInfo
 
 /** Decisions based on the editor contract, independent of a live InputConnection. */
 internal object EditorPolicy {
+    enum class InputKind {
+        Text,
+        Email,
+        Url,
+        Integer,
+        Decimal,
+        SignedInteger,
+        SignedDecimal,
+        Phone,
+        DateTime,
+        Password,
+    }
+
     data class EnterAction(val id: Int?, val label: String)
+
+    private const val CAP_FLAGS =
+        InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
+            InputType.TYPE_TEXT_FLAG_CAP_WORDS or
+            InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
 
     fun enterAction(imeOptions: Int, customId: Int = 0, customLabel: String? = null): EnterAction {
         if (imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0) {
@@ -27,18 +45,109 @@ internal object EditorPolicy {
         return EnterAction(id, label)
     }
 
+    fun kind(inputType: Int): InputKind {
+        val inputClass = inputType and InputType.TYPE_MASK_CLASS
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        return when (inputClass) {
+            InputType.TYPE_CLASS_TEXT -> when {
+                isPassword(inputType) -> InputKind.Password
+                variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                    variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS -> InputKind.Email
+                variation == InputType.TYPE_TEXT_VARIATION_URI -> InputKind.Url
+                else -> InputKind.Text
+            }
+
+            InputType.TYPE_CLASS_NUMBER -> when {
+                // Keep numeric passwords on the numeric keyboard; sensitivity is exposed by isPassword.
+                variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD -> InputKind.Integer
+                inputType and InputType.TYPE_NUMBER_FLAG_DECIMAL != 0 &&
+                    inputType and InputType.TYPE_NUMBER_FLAG_SIGNED != 0 -> InputKind.SignedDecimal
+                inputType and InputType.TYPE_NUMBER_FLAG_DECIMAL != 0 -> InputKind.Decimal
+                inputType and InputType.TYPE_NUMBER_FLAG_SIGNED != 0 -> InputKind.SignedInteger
+                else -> InputKind.Integer
+            }
+
+            InputType.TYPE_CLASS_PHONE -> InputKind.Phone
+            InputType.TYPE_CLASS_DATETIME -> InputKind.DateTime
+            else -> InputKind.Text
+        }
+    }
+
     fun prefersNumbers(inputType: Int): Boolean = when (inputType and InputType.TYPE_MASK_CLASS) {
         InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME -> true
         else -> false
     }
 
+    fun asciiPunctuation(inputType: Int): Boolean = when (kind(inputType)) {
+        InputKind.Email,
+        InputKind.Url,
+        InputKind.Integer,
+        InputKind.Decimal,
+        InputKind.SignedInteger,
+        InputKind.SignedDecimal,
+        InputKind.Phone,
+        InputKind.DateTime,
+        InputKind.Password,
+        -> true
+
+        InputKind.Text -> false
+    }
+
+    /**
+     * Normalizes compatibility punctuation for editors that expect an ASCII alphabet.
+     * Unknown clipboard content is retained verbatim.
+     */
+    fun normalizeText(text: String, inputType: Int): String {
+        if (!asciiPunctuation(inputType) || text.isEmpty()) return text
+        return buildString(text.length) {
+            text.forEach { character ->
+                when {
+                    character in '\uFF01'..'\uFF5E' -> append((character.code - 0xFEE0).toChar())
+                    character == '\u3002' -> append('.')
+                    character == '\u3001' -> append(',')
+                    character == '\uFE50' || character == '\uFE51' -> append(',')
+                    character == '\uFE52' -> append('.')
+                    character == '\uFE54' -> append(';')
+                    character == '\uFE55' -> append(':')
+                    character == '\uFE56' -> append('?')
+                    character == '\uFE57' -> append('!')
+                    character == '\uFE5F' -> append('#')
+                    character == '\uFE60' -> append('&')
+                    character == '\uFE61' -> append('*')
+                    character == '\uFE62' -> append('+')
+                    character == '\uFE63' -> append('-')
+                    character == '\uFE64' -> append('<')
+                    character == '\uFE65' -> append('>')
+                    character == '\uFE66' -> append('=')
+                    character == '\uFE68' -> append('\\')
+                    character == '\uFE69' -> append('$')
+                    character == '\uFE6A' -> append('%')
+                    character == '\uFE6B' -> append('@')
+                    else -> append(character)
+                }
+            }
+        }
+    }
+
+    /** Returns only explicit text capitalization flags applicable to this editor. */
+    fun autoCapsFlags(inputType: Int): Int {
+        if (inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return 0
+        return when (kind(inputType)) {
+            InputKind.Text -> inputType and CAP_FLAGS
+            else -> 0
+        }
+    }
+
     fun isPassword(inputType: Int): Boolean {
-        val kind = inputType and InputType.TYPE_MASK_CLASS
+        val inputClass = inputType and InputType.TYPE_MASK_CLASS
         val variation = inputType and InputType.TYPE_MASK_VARIATION
-        return (kind == InputType.TYPE_CLASS_TEXT && variation in setOf(
-            InputType.TYPE_TEXT_VARIATION_PASSWORD,
-            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
-        )) || (kind == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        return when (inputClass) {
+            InputType.TYPE_CLASS_TEXT -> variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD
+
+            InputType.TYPE_CLASS_NUMBER -> variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            else -> false
+        }
     }
 }

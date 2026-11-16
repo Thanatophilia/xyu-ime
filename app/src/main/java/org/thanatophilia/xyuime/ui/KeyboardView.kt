@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
@@ -93,7 +94,15 @@ data class KeyboardUiState(
     val page: KeyboardPage = KeyboardPage.Letters,
     val uppercase: Boolean = false,
     val capsLock: Boolean = false,
-    val actionLabel: String = "Enter",
+    val actionLabel: String = "回车",
+    val editing: Boolean = false,
+    val selecting: Boolean = false,
+    val sensitive: Boolean = false,
+    val hasSelection: Boolean = false,
+    val inputHint: String = "English",
+    val comma: String = "，",
+    val period: String = "。",
+    val numberKind: String = "number",
 )
 
 /** Events emitted by [XyuKeyboard] for the IME controller to interpret. */
@@ -117,7 +126,16 @@ sealed interface KeyboardAction {
     data object NextLanguage : KeyboardAction
 
     data object PickInputMethod : KeyboardAction
+    data object ToggleEditing : KeyboardAction
+    data object ToggleSelection : KeyboardAction
+    data object SelectAll : KeyboardAction
+    data object Copy : KeyboardAction
+    data object Cut : KeyboardAction
+    data object Paste : KeyboardAction
+    data class MoveCursor(val direction: CursorDirection) : KeyboardAction
 }
+
+enum class CursorDirection { Left, Right, Up, Down, Home, End }
 
 private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
 
@@ -233,6 +251,8 @@ private fun KeyboardSurface(
         verticalArrangement = Arrangement.spacedBy(rowGap),
     ) {
         InfoStrip(
+            state = state,
+            onAction = onAction,
             fontScale = fontScale,
             compactLandscape = compactLandscape,
             modifier = Modifier
@@ -245,7 +265,9 @@ private fun KeyboardSurface(
                 .fillMaxWidth()
                 .height(panelHeight),
         ) {
-            when (state.page) {
+            if (state.editing) {
+                EditingPanel(state, onAction, fontScale, keyShape, rowGap, Modifier.fillMaxSize())
+            } else when (state.page) {
                 KeyboardPage.Letters -> LettersPanel(
                     state = state,
                     onAction = onAction,
@@ -257,6 +279,7 @@ private fun KeyboardSurface(
                 )
 
                 KeyboardPage.Numbers -> NumbersPanel(
+                    state = state,
                     onAction = onAction,
                     fontScale = fontScale,
                     compactLandscape = compactLandscape,
@@ -291,6 +314,8 @@ private fun KeyboardSurface(
 
 @Composable
 private fun InfoStrip(
+    state: KeyboardUiState,
+    onAction: (KeyboardAction) -> Unit,
     fontScale: Float,
     compactLandscape: Boolean,
     modifier: Modifier,
@@ -306,13 +331,22 @@ private fun InfoStrip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "絮雨 · English",
+            text = if (state.selecting) "絮雨 · 选择文字" else "絮雨 · ${state.inputHint}",
+            modifier = Modifier.weight(1f),
             color = colors.onSurfaceVariant,
             fontSize = adaptiveSp(12f, fontScale, 15f),
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Clip,
         )
+        Box(Modifier.fillMaxHeight().size(width = 62.dp, height = if (compactLandscape) 23.dp else 28.dp)
+            .background(if (state.editing) colors.primaryContainer else Color.Transparent, shape)
+            .semantics { contentDescription = "编辑工具"; role = Role.Button; onClick { onAction(KeyboardAction.ToggleEditing); true } }
+            .pointerInput(Unit) { detectTapGestures(onTap = { onAction(KeyboardAction.ToggleEditing) }) },
+            contentAlignment = Alignment.Center) {
+            Text(if (state.editing) "键盘" else "编辑", color = colors.primary,
+                fontSize = adaptiveSp(12f, fontScale, 15f), fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 
@@ -357,9 +391,16 @@ private fun CharacterRow(characters: List<String>, uppercase: Boolean, onAction:
 }
 
 @Composable
-private fun NumbersPanel(onAction: (KeyboardAction) -> Unit, fontScale: Float, compactLandscape: Boolean,
+private fun NumbersPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit, fontScale: Float, compactLandscape: Boolean,
     keyShape: Shape, rowGap: Dp, modifier: Modifier) {
-    AuxiliaryPanel(NUMBER_ROW_ONE, NUMBER_ROW_TWO, NUMBER_ROW_THREE, onAction, fontScale, keyShape, rowGap,
+    val shortcuts = when (state.numberKind) {
+        "phone" -> listOf("+", "*", "#", ",", ";")
+        "decimal" -> listOf(".", "-", "+", ",", "/")
+        "signed" -> listOf("-", "+", ".", ",", "/")
+        "datetime" -> listOf("/", "-", ":", ".", "+")
+        else -> NUMBER_ROW_THREE
+    }
+    AuxiliaryPanel(NUMBER_ROW_ONE, NUMBER_ROW_TWO, shortcuts, onAction, fontScale, keyShape, rowGap,
         modifier, KeyboardAction.ToggleNumbers)
 }
 
@@ -397,16 +438,53 @@ private fun BottomBar(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit
             active = state.page == KeyboardPage.Symbols, small = true, onClick = { onAction(KeyboardAction.ToggleSymbols) })
         KeyFace("123", "数字键盘", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
             active = state.page == KeyboardPage.Numbers, small = true, onClick = { onAction(KeyboardAction.ToggleNumbers) })
-        KeyFace("，", "逗号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
-            onClick = { onAction(KeyboardAction.Text("，")) })
+        KeyFace(state.comma, "逗号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
+            onClick = { onAction(KeyboardAction.Text(state.comma)) })
         KeyFace("空格", "空格", fontScale, keyShape, Modifier.weight(3.10f).fillMaxHeight(), small = true,
             onClick = { onAction(KeyboardAction.Space) })
-        KeyFace("。", "句号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
-            onClick = { onAction(KeyboardAction.Text("。")) })
+        KeyFace(state.period, "句号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
+            onClick = { onAction(KeyboardAction.Text(state.period)) })
         KeyFace("", "切换语言，长按切换输入法", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
             onClick = { onAction(KeyboardAction.NextLanguage) }, onLongClick = { onAction(KeyboardAction.PickInputMethod) }, icon = "globe")
         KeyFace(state.actionLabel, "回车：${state.actionLabel}", fontScale, keyShape, Modifier.weight(1.45f).fillMaxHeight(),
             active = true, small = true, onClick = { onAction(KeyboardAction.Enter) })
+    }
+}
+
+@Composable
+private fun EditingPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit, fontScale: Float,
+    shape: Shape, gap: Dp, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            listOf("全选" to KeyboardAction.SelectAll, "复制" to KeyboardAction.Copy,
+                "剪切" to KeyboardAction.Cut, "粘贴" to KeyboardAction.Paste).forEach { (title, action) ->
+                val enabled = when (action) {
+                    KeyboardAction.Copy, KeyboardAction.Cut -> !state.sensitive && state.hasSelection
+                    else -> true
+                }
+                KeyFace(title, title, fontScale, shape, Modifier.weight(1f).fillMaxHeight(), small = true,
+                    enabled = enabled, onClick = { onAction(action) })
+            }
+        }
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            KeyFace("行首", "光标到行首", fontScale, shape, Modifier.weight(1f).fillMaxHeight(), small = true,
+                onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Home)) })
+            KeyFace("↑", "光标上移", fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
+                onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Up)) })
+            KeyFace("行尾", "光标到行尾", fontScale, shape, Modifier.weight(1f).fillMaxHeight(), small = true,
+                onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.End)) })
+            KeyFace("选择", "选择文字模式", fontScale, shape, Modifier.weight(1f).fillMaxHeight(), small = true,
+                active = state.selecting, onClick = { onAction(KeyboardAction.ToggleSelection) })
+        }
+        Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            KeyFace("←", "光标左移", fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
+                onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Left)) })
+            KeyFace("↓", "光标下移", fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
+                onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Down)) })
+            KeyFace("→", "光标右移", fontScale, shape, Modifier.weight(1f).fillMaxHeight(),
+                onClick = { onAction(KeyboardAction.MoveCursor(CursorDirection.Right)) })
+            DeleteKey(onAction, fontScale, shape, Modifier.weight(1f).fillMaxHeight())
+        }
     }
 }
 
@@ -418,13 +496,14 @@ private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shap
 
 @Composable
 private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
-    modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false,
+    modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false, enabled: Boolean = true,
     onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     val view = LocalView.current
     val configuration = LocalViewConfiguration.current
-    val click by rememberUpdatedState(onClick)
+    val click by rememberUpdatedState({ if (enabled) onClick() })
     val longClick by rememberUpdatedState(onLongClick)
+    val available by rememberUpdatedState(enabled)
     var pressed by remember { mutableStateOf(false) }
     val background = when {
         pressed -> colors.primary.copy(alpha = 0.24f)
@@ -432,8 +511,8 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
         small || icon != null -> colors.surfaceVariant
         else -> if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White
     }
-    val foreground = if (active) colors.onPrimaryContainer else colors.onSurface
-    val gesture = if (repeat) {
+    val foreground = (if (active) colors.onPrimaryContainer else colors.onSurface).copy(alpha = if (enabled) 1f else 0.35f)
+    val gesture = if (!enabled) Modifier else if (repeat) {
         Modifier.pointerInput(configuration.longPressTimeoutMillis) {
             coroutineScope {
                 awaitEachGesture {
@@ -447,7 +526,13 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
                         while (isActive) { click(); delay(BACKSPACE_REPEAT_DELAY_MILLIS) }
                     }
                     try {
-                        waitForUpOrCancellation()?.consume()
+                        while (true) {
+                            val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) { change.consume(); break }
+                            if (change.isConsumed || change.position.x < 0 || change.position.y < 0 ||
+                                change.position.x >= size.width || change.position.y >= size.height) break
+                            change.consume()
+                        }
                     } finally {
                         repetition.cancel()
                         pressed = false
@@ -456,7 +541,7 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
             }
         }
     } else {
-        Modifier.pointerInput(onLongClick != null) {
+        Modifier.pointerInput(label, description, onLongClick != null) {
             detectTapGestures(
                 onPress = {
                     pressed = true
@@ -478,8 +563,9 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
         .semantics(mergeDescendants = true) {
             role = Role.Button
             contentDescription = description
-            onClick { click(); true }
-            if (onLongClick != null) {
+            if (!enabled) disabled()
+            onClick { if (available) { click(); true } else false }
+            if (onLongClick != null && enabled) {
                 this.onLongClick(label = "长按") { longClick?.invoke(); true }
             }
         }.then(gesture), contentAlignment = Alignment.Center) {
