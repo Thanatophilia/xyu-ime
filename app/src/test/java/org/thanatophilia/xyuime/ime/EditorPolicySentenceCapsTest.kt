@@ -23,6 +23,8 @@ class EditorPolicySentenceCapsTest {
 
     @Test fun punctuationAtDocumentEndIsRecognized() {
         assertTrue(EditorPolicy.sentenceNeedsCaps("First.   Second!   "))
-        assertFalse(EditorPolicy.sentenceNeedsCaps("First..."))
+        assertTrue(EditorPolicy.sentenceNeedsCaps("First..."))
+        assertTrue(EditorPolicy.sentenceNeedsCaps("First\n  "))
+        assertFalse(EditorPolicy.sentenceNeedsCaps(null))
     }
 }

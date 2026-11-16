@@ -130,6 +130,45 @@ class ImePhase2Test {
         screenshot("phase2-text")
     }
 
+    @Test fun sentenceCapsFollowPunctuationButNotOrdinarySpaces() = withIme {
+        device.pressBack()
+        node(By.text("更多测试类型").pkg(pkg)).click()
+        val first = node(By.text("邮箱").pkg(pkg)).visibleBounds
+        repeat(5) {
+            freshTree()
+            if (!device.hasObject(By.text("句首大写").pkg(pkg))) {
+                device.swipe(device.displayWidth * 9 / 10, first.centerY(),
+                    device.displayWidth / 10, first.centerY(), 20)
+            }
+        }
+        node(By.text("句首大写").pkg(pkg)).click()
+        editor().click()
+        key("H"); key("i")
+        description("空格")
+        key("t"); key("o")
+        expectText("Hi to") // A word separator alone must not capitalize the next word.
+        description("句号")
+        key("N"); key("o")
+        expectText("Hi to。No") // Chinese full stop needs no separating space.
+        description("句号")
+        repeat(3) { description("空格") }
+        key("Y"); key("e"); key("s")
+        expectText("Hi to。No。   Yes")
+        description("符号键盘"); key("!"); description("返回字母键盘")
+        description("空格")
+        key("O"); key("k")
+        expectText("Hi to。No。   Yes! Ok")
+        description("回车：回车")
+        key("N"); key("e"); key("w")
+        expectText("Hi to。No。   Yes! Ok\nNew")
+        // Explicit lower-case Shift must override the sentence suggestion for one letter.
+        description("句号")
+        description("切换大小写，长按锁定大写")
+        key("a"); key("b")
+        expectText("Hi to。No。   Yes! Ok\nNew。ab")
+        screenshot("sentence-caps")
+    }
+
     @Test fun completeEmojiDeleteAndPasswordClipboardProtection() = withIme {
         // The explicit sample fixture contains no personal/user clipboard content.
         val sample = "A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣éZ"

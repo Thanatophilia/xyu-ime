@@ -135,15 +135,14 @@ internal object EditorPolicy {
      * in some editors and Compose text fields.
      */
     fun sentenceNeedsCaps(textBeforeCursor: CharSequence?): Boolean {
-        val text = textBeforeCursor?.toString().orEmpty()
-        if (text.isEmpty()) return true
+        val text = textBeforeCursor ?: return false // Unavailable context is not an empty document.
         var index = text.lastIndex
-        while (index >= 0 && text[index].isWhitespace()) index--
-        while (index >= 0 && text[index] in CLOSING_DELIMITERS) {
-            index--
-            while (index >= 0 && text[index].isWhitespace()) index--
+        while (index >= 0) {
+            val char = text[index]
+            if (char == '\n' || char == '\r') return true
+            if (char.isWhitespace() || char in CLOSING_DELIMITERS) index-- else break
         }
-        return index < 0 || text[index] in SENTENCE_TERMINATORS || text[index] == '\n' || text[index] == '\r'
+        return index < 0 || text[index] in SENTENCE_TERMINATORS
     }
 
     private const val SENTENCE_TERMINATORS = ".。!?！？"
