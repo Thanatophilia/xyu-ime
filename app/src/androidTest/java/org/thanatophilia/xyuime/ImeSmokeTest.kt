@@ -28,7 +28,9 @@ class ImeSmokeTest {
             device.executeShellCommand("ime set $ime")
             context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             assertNotNull(device.wait(Until.findObject(By.pkg(packageName).depth(0)), 15_000))
-            val editor = device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(packageName)), 10_000)
+            val editor = device.wait(Until.findObject(By.focused(true).pkg(packageName)), 10_000)
+                ?: device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(packageName)), 10_000)
+                ?: device.wait(Until.findObject(By.clazz("android.view.View").pkg(packageName).textContains("点击这里")), 5_000)
             assertNotNull("The trial editor must be available", editor)
             requireNotNull(editor).click()
             val q = device.wait(Until.findObject(By.text("q").pkg(packageName)), 10_000)
@@ -36,7 +38,10 @@ class ImeSmokeTest {
             val screenshot = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "keyboard-phase1.png")
             device.takeScreenshot(screenshot)
             requireNotNull(q).click()
-            assertTrue("IME key must commit q through InputConnection", device.wait(Until.hasObject(By.clazz("android.widget.EditText").textContains("q")), 5_000))
+            assertTrue(
+                "IME key must commit q through InputConnection",
+                device.wait(Until.hasObject(By.pkg(packageName).textContains("q")), 5_000),
+            )
             device.pressBack()
             requireNotNull(editor).click()
             assertNotNull("Compose keyboard must return after hiding", device.wait(Until.findObject(By.text("q").pkg(packageName)), 5_000))

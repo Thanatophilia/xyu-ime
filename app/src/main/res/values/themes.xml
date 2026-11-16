@@ -7,7 +7,6 @@
     </style>
     <style name="Theme.Xyu.Ime" parent="android:style/Theme.InputMethod">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:colorAccent">#426C65</item>
     </style>
 </resources>
