@@ -59,11 +59,146 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     private var selectionEnd = -1
     private var selectionAnchor: Int? = null
     private var requestedSelection: Pair<Int, Int>? = null
+    private lateinit var rime: org.thanatophilia.xyuime.rime.RimeEngine
+    private val chineseSession = ChineseSession()
+    private val actions = ArrayDeque<KeyboardAction>()
+    private var engineBusy = false
+    private var chinesePreferred = false
+    private var chineseAllowed = false
+    private var composing = false
+    private var applyingComposition = false
+    private var composingEnd = -1
+    private var lastPreedit = ""
+    private var engineReady = false
+    private var preparingChinese = false
+    private val expectedEditorSelections = mutableSetOf<Pair<Int, Int>>()
+
+    private val chinese: Boolean get() = chinesePreferred && chineseAllowed && engineReady
+
+    private fun resetChinese(clearActions: Boolean = true) {
+        chineseSession.invalidate()
+        if (clearActions) actions.clear()
+        expectedEditorSelections.clear()
+        engineBusy = false
+        preparingChinese = false
+        composing = false
+        composingEnd = -1
+        lastPreedit = ""
+        if (::rime.isInitialized) rime.reset()
+        keyboardState = keyboardState.copy(preedit = "", candidates = emptyList(),
+            candidateRevision = chineseSession.revision, candidatesExpanded = false, loadingCandidates = false)
+    }
+
+    private fun configureChinese(info: EditorInfo?) {
+        val type = info?.inputType ?: 0
+        chineseAllowed = type and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT &&
+            !EditorPolicy.isPassword(type) && !EditorPolicy.asciiPunctuation(type) &&
+            (info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING == 0
+        keyboardState = keyboardState.copy(chinese = chinese,
+            inputHint = if (chinese) "中文拼音" else keyboardState.inputHint)
+        if (chineseAllowed && !engineReady) prepareChinese() else if (chinese) requestRime()
+    }
+
+    private fun prepareChinese() {
+        if (preparingChinese) return
+        preparingChinese = true
+        val owner = chineseSession.epoch
+        keyboardState = keyboardState.copy(inputHint = "正在准备词库 · English")
+        rime.request(owner) { output ->
+            if (!chineseSession.accept(output.inputSessionId, output.sequence)) return@request
+            preparingChinese = false
+            engineReady = output.error == null
+            // Deployment only opens the Chinese entry; never switches what the user is typing.
+            chinesePreferred = false
+            keyboardState = keyboardState.copy(chinese = false,
+                inputHint = if (engineReady) "English" else "中文暂不可用 · 点击地球重试")
+        }
+    }
+
+    private fun requestRime(operation: Int = 0, key: Int = 0, more: Boolean = false,
+                            fallback: String? = null, after: (() -> Unit)? = null) {
+        engineBusy = true
+        keyboardState = keyboardState.copy(loadingCandidates = true)
+        val owner = chineseSession.epoch
+        rime.request(owner, operation, key, chineseSession.limit) { output ->
+            if (!chineseSession.accept(output.inputSessionId, output.sequence)) return@request
+            engineBusy = false
+            keyboardState = keyboardState.copy(loadingCandidates = false)
+            if (output.error != null) {
+                // Keep existing composing text as literal text; never delete an unknown range.
+                currentInputConnection?.finishComposingText()
+                composing = false
+                chinesePreferred = false
+                engineReady = false
+                resetChinese(clearActions = false)
+                keyboardState = keyboardState.copy(chinese = false, inputHint = "中文暂不可用 · English")
+                updateAutoCaps()
+                drainActions()
+                return@request
+            }
+            if (!more) {
+                chineseSession.compositionChanged()
+                val connection = currentInputConnection
+                val base = if (composingEnd >= 0) composingEnd - lastPreedit.length
+                    else minOf(selectionStart, selectionEnd).coerceAtLeast(0)
+                val nextEnd = base + output.commitText.length + output.preedit.length
+                expectedEditorSelections.add(nextEnd to nextEnd)
+                applyingComposition = true
+                connection?.beginBatchEdit()
+                try {
+                    if (output.commitText.isNotEmpty()) connection?.commitText(output.commitText, 1)
+                    if (output.hasComposition) {
+                        connection?.setComposingText(output.preedit, 1)
+                    } else if (composing && output.commitText.isEmpty()) {
+                        connection?.setComposingText("", 1)
+                    }
+                    if (!output.hasComposition) connection?.finishComposingText()
+                    composing = output.hasComposition
+                    lastPreedit = output.preedit
+                    composingEnd = if (output.hasComposition) nextEnd else -1
+                } finally {
+                    connection?.endBatchEdit()
+                    applyingComposition = false
+                }
+            }
+            keyboardState = keyboardState.copy(preedit = output.preedit,
+                candidates = output.candidates, candidateRevision = chineseSession.revision,
+                highlightedCandidate = output.highlightedIndex,
+                hasMoreCandidates = !output.isLastPage && chineseSession.limit < ChineseSession.MAX_LIMIT,
+                candidatesExpanded = keyboardState.candidatesExpanded && output.hasComposition)
+            if (!output.consumed && fallback != null && output.commitText.isEmpty() && !output.hasComposition)
+                commitText(fallback)
+            after?.invoke()
+            drainActions()
+        }
+    }
+
+    private fun drainActions() {
+        while (!engineBusy && actions.isNotEmpty()) dispatchAction(actions.removeFirst())
+    }
+
+    /** Return is handled by Rime's express_editor: commit raw input, not the candidate. */
+    private fun finishRaw(after: () -> Unit) {
+        if (composing) requestRime(1, 0xff0d, after = after) else after()
+    }
+
+    private fun switchLanguage(preferred: Boolean) {
+        finishRaw {
+            chinesePreferred = preferred
+            resetChinese(clearActions = false)
+            caseState.reset()
+            keyboardState = keyboardState.copy(chinese = chinese,
+                inputHint = if (chinese) "中文拼音" else "English", editing = false)
+            updateAutoCaps()
+            if (chinese) requestRime()
+        }
+    }
 
     override fun onCreate() {
         savedState.performAttach()
         savedState.performRestore(null)
         super.onCreate()
+        rime = org.thanatophilia.xyuime.rime.RimeEngine(this)
         registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         installWindowOwners()
     }
@@ -105,6 +240,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         inputSession++
+        resetChinese()
         caseState.reset()
         selectionStart = attribute?.initialSelStart ?: -1
         selectionEnd = attribute?.initialSelEnd ?: -1
@@ -134,6 +270,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
                 "Decimal", "SignedDecimal" -> "decimal"; "DateTime" -> "datetime"; else -> "number"
             },
         )
+        configureChinese(attribute)
         updateAutoCaps()
     }
 
@@ -142,12 +279,14 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         // Some editors reuse a connection without a fresh onStartInput callback. Reset
         // view-only controls here so a previous editing panel never leaks into a new field.
         inputSession++
+        resetChinese()
         caseState.reset()
         keyboardState = keyboardState.copy(
             page = if (EditorPolicy.prefersNumbers(info?.inputType ?: currentInputEditorInfo?.inputType ?: 0)) KeyboardPage.Numbers else KeyboardPage.Letters,
             editing = false,
             selecting = false,
         )
+        configureChinese(info ?: currentInputEditorInfo)
         inputViewActive = true
         selectionAnchor = null
         requestedSelection = null
@@ -179,6 +318,8 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     private fun pauseViewLifecycle() {
         inputViewActive = false
+        currentInputConnection?.finishComposingText()
+        resetChinese()
         if (registry.currentState.isAtLeast(Lifecycle.State.RESUMED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         if (registry.currentState.isAtLeast(Lifecycle.State.STARTED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
     }
@@ -186,6 +327,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     override fun onFinishInput() {
         inputViewActive = false
         inputSession++
+        resetChinese()
         caseState.reset()
         selectionAnchor = null
         requestedSelection = null
@@ -204,14 +346,20 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     override fun onCurrentInputMethodSubtypeChanged(newSubtype: InputMethodSubtype?) {
         super.onCurrentInputMethodSubtypeChanged(newSubtype)
-        // Phase one exposes only en-US. Later Rime languages will be selected here.
-        caseState.reset()
-        keyboardState = keyboardState.copy(page = KeyboardPage.Letters, editing = false, uppercase = false, capsLock = false)
-        updateAutoCaps()
+        handleAction(KeyboardAction.SetChinese(newSubtype?.languageTag?.startsWith("zh") == true ||
+            newSubtype?.locale?.startsWith("zh") == true))
     }
 
     override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        val expected = expectedEditorSelections.remove(newSelStart to newSelEnd)
+        if ((composing || engineBusy) && !applyingComposition && !expected &&
+            (newSelStart != oldSelStart || newSelEnd != oldSelEnd)) {
+            // Invalidate even before the first preedit arrives; it must not replace a
+            // selection the user made while a native request was still pending.
+            currentInputConnection?.finishComposingText()
+            resetChinese()
+        }
         selectionStart = newSelStart
         selectionEnd = newSelEnd
         if (requestedSelection == (newSelStart to newSelEnd)) requestedSelection = null
@@ -227,7 +375,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         val sentenceCaps = flags != 0 &&
             (info.inputType and InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) != 0 &&
             EditorPolicy.sentenceNeedsCaps(connection?.getTextBeforeCursor(256, 0))
-        caseState.automaticUppercase = editorCaps || sentenceCaps
+        caseState.automaticUppercase = !chinese && (editorCaps || sentenceCaps)
         syncCaseState()
     }
 
@@ -236,6 +384,76 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     }
 
     private fun handleAction(action: KeyboardAction) {
+        // Reject obsolete UI snapshots before enqueuing and again before dispatch.
+        if (action is KeyboardAction.SelectCandidate && !chineseSession.matches(action.revision)) return
+        if (action is KeyboardAction.LoadMoreCandidates &&
+            (engineBusy || !chineseSession.matches(action.revision))) return
+        actions.addLast(action)
+        drainActions()
+    }
+
+    private fun dispatchAction(action: KeyboardAction) {
+        when (action) {
+            is KeyboardAction.SetChinese -> { switchLanguage(action.enabled); return }
+            KeyboardAction.NextLanguage -> {
+                if (!chineseAllowed) { showNotice("此输入框使用安全英文直输"); return }
+                if (!engineReady) { prepareChinese(); showNotice("正在准备词库，可继续英文输入"); return }
+                switchLanguage(!chinesePreferred); return
+            }
+            is KeyboardAction.SelectCandidate -> {
+                if (chinese && composing && chineseSession.matches(action.revision) &&
+                    action.index in keyboardState.candidates.indices) requestRime(2, action.index)
+                return
+            }
+            is KeyboardAction.LoadMoreCandidates -> {
+                if (chinese && composing && chineseSession.matches(action.revision) && keyboardState.hasMoreCandidates) {
+                    chineseSession.more()
+                    requestRime(more = true)
+                }
+                return
+            }
+            KeyboardAction.ToggleCandidates -> {
+                if (composing) keyboardState = keyboardState.copy(candidatesExpanded = !keyboardState.candidatesExpanded)
+                return
+            }
+            else -> Unit
+        }
+        if (chinese) {
+            when (action) {
+                is KeyboardAction.Text -> {
+                    val value = action.value
+                    if (value.length == 1 && (value[0] in 'a'..'z' || value == "'")) {
+                        requestRime(1, value[0].code, fallback = value); return
+                    }
+                    if (value == "," || value == "，" || value == "." || value == "。") {
+                        val punctuation = if (value == "," || value == "，") "，" else "。"
+                        if (composing) requestRime(4, after = { commitText(punctuation) }) else commitText(punctuation)
+                        return
+                    }
+                    finishRaw { commitText(value) }; return
+                }
+                KeyboardAction.Space -> {
+                    if (composing) requestRime(1, 0x20) else commitText(" ")
+                    return
+                }
+                KeyboardAction.Backspace -> {
+                    if (composing) requestRime(1, 0xff08) else backspace()
+                    return
+                }
+                KeyboardAction.Enter -> {
+                    if (composing) finishRaw {} else enter()
+                    return
+                }
+                KeyboardAction.Shift, KeyboardAction.CapsLock -> Unit
+                else -> if (composing) {
+                    finishRaw { dispatchOrdinaryAction(action) }; return
+                }
+            }
+        }
+        dispatchOrdinaryAction(action)
+    }
+
+    private fun dispatchOrdinaryAction(action: KeyboardAction) {
         when (action) {
             is KeyboardAction.Text -> commitText(action.value)
             KeyboardAction.Space -> commitText(" ")
@@ -252,10 +470,9 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             KeyboardAction.Cut -> copySelection(cut = true)
             KeyboardAction.Paste -> paste()
             is KeyboardAction.MoveCursor -> moveCursor(action.direction)
-            KeyboardAction.NextLanguage -> {
-                toast?.cancel()
-                toast = Toast.makeText(this, "当前仅启用 English；中文将在 Rime 阶段加入", Toast.LENGTH_SHORT).also { it.show() }
-            }
+            KeyboardAction.NextLanguage, KeyboardAction.ToggleCandidates,
+            is KeyboardAction.SelectCandidate, is KeyboardAction.LoadMoreCandidates,
+            is KeyboardAction.SetChinese -> Unit
             KeyboardAction.PickInputMethod -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
         }
     }
@@ -268,6 +485,9 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         if (inputType == InputType.TYPE_NULL && committed.all { it.code < 128 }) {
             committed.forEach { sendKeyChar(it) }
         } else {
+            val end = minOf(selectionStart, selectionEnd).coerceAtLeast(0) + committed.length
+            if (expectedEditorSelections.size > 32) expectedEditorSelections.clear()
+            expectedEditorSelections.add(end to end)
             connection.commitText(committed, 1)
         }
         caseState.committed(committed)
@@ -397,6 +617,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     override fun onDestroy() {
         toast?.cancel()
         pauseViewLifecycle()
+        rime.close()
         composeView?.disposeComposition()
         composeView = null
         registry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)

@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">絮雨输入法</string>
     <string name="language_english">English</string>
+    <string name="language_chinese">中文拼音</string>
 </resources>

@@ -3,6 +3,21 @@ package org.thanatophilia.xyuime.ui
 import android.content.res.Configuration
 import android.view.HapticFeedbackConstants
 import android.view.View
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.stateDescription
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -108,6 +123,14 @@ data class KeyboardUiState(
     val comma: String = "，",
     val period: String = "。",
     val numberKind: String = "number",
+    val chinese: Boolean = false,
+    val preedit: String = "",
+    val candidates: List<String> = emptyList(),
+    val candidateRevision: Long = 0,
+    val highlightedCandidate: Int = 0,
+    val hasMoreCandidates: Boolean = false,
+    val loadingCandidates: Boolean = false,
+    val candidatesExpanded: Boolean = false,
 )
 
 /** Events emitted by [XyuKeyboard] for the IME controller to interpret. */
@@ -128,6 +151,10 @@ sealed interface KeyboardAction {
 
     data object ToggleSymbols : KeyboardAction
 
+    data class SelectCandidate(val revision: Long, val index: Int) : KeyboardAction
+    data class LoadMoreCandidates(val revision: Long) : KeyboardAction
+    data class SetChinese(val enabled: Boolean) : KeyboardAction
+    data object ToggleCandidates : KeyboardAction
     data object NextLanguage : KeyboardAction
 
     data object PickInputMethod : KeyboardAction
@@ -242,7 +269,13 @@ private fun KeyboardSurface(
     val fontScale = density.fontScale
     val outerPadding = if (compactLandscape) 4.dp else 5.dp
     val rowGap = if (compactLandscape) 3.dp else 5.dp
-    val stripHeight = if (compactLandscape) 23.dp else 28.dp
+    val stripHeight = if (state.preedit.isNotEmpty()) {
+        if (compactLandscape) 44.dp else 58.dp
+    } else if (compactLandscape) 23.dp else 28.dp
+    val stripScroll = remember(state.candidateRevision) { LazyListState() }
+    val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
+    val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
+        animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
     val panelHeight = (
         keyboardHeight - (outerPadding * 2) - stripHeight - bottomHeight - (rowGap * 2)
@@ -255,7 +288,8 @@ private fun KeyboardSurface(
             .padding(horizontal = outerPadding, vertical = outerPadding),
         verticalArrangement = Arrangement.spacedBy(rowGap),
     ) {
-        InfoStrip(
+        if (state.preedit.isNotEmpty()) CandidateStrip(state, onAction, stripScroll,
+            Modifier.fillMaxWidth().height(stripHeight)) else InfoStrip(
             state = state,
             onAction = onAction,
             fontScale = fontScale,
@@ -265,6 +299,18 @@ private fun KeyboardSurface(
                 .height(stripHeight),
         )
 
+        if (state.preedit.isNotEmpty() && (state.candidatesExpanded || reveal > 0f)) {
+            // Ordinary keys are absent during both opening and closing: no touch or
+            // accessibility targets can leak through the animated candidate surface.
+            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)) {
+                CandidateDrawer(state, onAction, drawerScroll,
+                    Modifier.fillMaxSize().graphicsLayer {
+                        translationY = -(1f - reveal) * size.height
+                        alpha = reveal
+                    })
+            }
+        } else {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -314,6 +360,81 @@ private fun KeyboardSurface(
                 .fillMaxWidth()
                 .height(bottomHeight),
         )
+        }
+    }
+}
+
+@Composable
+private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
+    scroll: LazyListState, modifier: Modifier) {
+    val current by rememberUpdatedState(state)
+    val action by rememberUpdatedState(onAction)
+    LaunchedEffect(scroll, state.candidates.size, state.loadingCandidates) {
+        snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .distinctUntilChanged().collect { last ->
+                if (last >= current.candidates.size - 8 && current.hasMoreCandidates && !current.loadingCandidates)
+                    action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+            }
+    }
+    Column(modifier) {
+        Text(state.preedit, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.primary, fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "拼音预编辑" })
+        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            LazyRow(Modifier.weight(1f).fillMaxHeight(), state = scroll,
+                verticalAlignment = Alignment.CenterVertically) {
+                itemsIndexed(state.candidates, key = { index, _ -> index }) { index, candidate ->
+                    CandidateCell(candidate, index, state, onAction, Modifier.fillMaxHeight())
+                }
+            }
+            Box(Modifier.size(44.dp).clickable(onClick = { onAction(KeyboardAction.ToggleCandidates) })
+                .semantics {
+                    testTagsAsResourceId = true
+                    testTag = "candidate_toggle"
+                    contentDescription = if (state.candidatesExpanded) "收回候选" else "展开候选"
+                    stateDescription = if (state.candidatesExpanded) "已展开" else "已收起"
+                    role = Role.Button
+                }, contentAlignment = Alignment.Center) {
+                Text(if (state.candidatesExpanded) "⌃" else "⌄", fontSize = 24.sp,
+                    color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
+    scroll: LazyGridState, modifier: Modifier) {
+    val current by rememberUpdatedState(state)
+    val action by rememberUpdatedState(onAction)
+    LaunchedEffect(scroll, state.candidates.size, state.loadingCandidates) {
+        snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .distinctUntilChanged().collect { last ->
+                if (last >= current.candidates.size - 16 && current.hasMoreCandidates && !current.loadingCandidates)
+                    action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+            }
+    }
+    LazyVerticalGrid(columns = GridCells.Adaptive(88.dp), state = scroll,
+        modifier = modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
+        itemsIndexed(state.candidates, key = { index, _ -> index }) { index, candidate ->
+            CandidateCell(candidate, index, state, onAction, Modifier.fillMaxWidth().heightIn(min = 44.dp))
+        }
+    }
+}
+
+@Composable
+private fun CandidateCell(candidate: String, index: Int, state: KeyboardUiState,
+    onAction: (KeyboardAction) -> Unit, modifier: Modifier) {
+    Box(modifier.clickable { onAction(KeyboardAction.SelectCandidate(state.candidateRevision, index)) }
+        .semantics {
+            testTagsAsResourceId = true
+            testTag = "candidate:$index"
+            role = Role.Button
+        }.padding(horizontal = 12.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+        Text(candidate, color = if (index == state.highlightedCandidate) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (index == state.highlightedCandidate) FontWeight.SemiBold else FontWeight.Normal,
+            fontSize = 18.sp)
     }
 }
 
