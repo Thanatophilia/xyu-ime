@@ -66,6 +66,10 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -342,8 +346,15 @@ private fun InfoStrip(
         )
         Box(Modifier.fillMaxHeight().size(width = 62.dp, height = if (compactLandscape) 23.dp else 28.dp)
             .background(if (state.editing) colors.primaryContainer else Color.Transparent, shape)
-            .semantics { contentDescription = "编辑工具"; role = Role.Button; onClick { onAction(KeyboardAction.ToggleEditing); true } }
-            .pointerInput(Unit) { detectTapGestures(onTap = { onAction(KeyboardAction.ToggleEditing) }) },
+            .pointerInput(state.editing) { detectTapGestures(onTap = { onAction(KeyboardAction.ToggleEditing) }) }
+            .clearAndSetSemantics {
+                testTagsAsResourceId = true
+                testTag = "edit_toggle"
+                contentDescription = "编辑工具"
+                text = AnnotatedString(if (state.editing) "键盘" else "编辑")
+                role = Role.Button
+                onClick { onAction(KeyboardAction.ToggleEditing); true }
+            },
             contentAlignment = Alignment.Center) {
             Text(if (state.editing) "键盘" else "编辑", color = colors.primary,
                 fontSize = adaptiveSp(12f, fontScale, 15f), fontWeight = FontWeight.SemiBold)
@@ -498,7 +509,7 @@ private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shap
 @Composable
 private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
     modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false, enabled: Boolean = true,
-    decorative: Boolean = false, onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
+    onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     val view = LocalView.current
     val configuration = LocalViewConfiguration.current
@@ -560,15 +571,13 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
             )
         }
     }
-    if (decorative) {
-        // Decorative backgrounds must never appear as separate clickable accessibility nodes.
-        Box(modifier.clip(shape).background(background).border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape))
-        return
-    }
     Box(modifier.clip(shape).background(background).border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
         .then(gesture).clearAndSetSemantics {
             role = Role.Button
             contentDescription = description
+            testTagsAsResourceId = true
+            testTag = "key:$description"
+            if (icon == null) text = AnnotatedString(label)
             if (!enabled) disabled()
             onClick { if (available) { click(); true } else false }
             if (onLongClick != null && enabled) {
@@ -576,7 +585,7 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
             }
         }, contentAlignment = Alignment.Center) {
         if (icon != null) {
-            KeyIcon(icon, foreground, locked, Modifier.clearAndSetSemantics {})
+            KeyIcon(icon, foreground, locked, Modifier.size(22.dp).clearAndSetSemantics {})
         } else {
             Text(label, color = foreground, modifier = Modifier.clearAndSetSemantics {},
                 fontSize = adaptiveSp(if (small) 12f else 21f, fontScale, if (small) 14f else 25f),

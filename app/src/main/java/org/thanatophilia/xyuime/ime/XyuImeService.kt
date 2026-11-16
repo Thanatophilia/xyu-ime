@@ -149,6 +149,9 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             selecting = false,
         )
         inputViewActive = true
+        selectionAnchor = null
+        requestedSelection = null
+        updateAutoCaps()
         if (!registry.currentState.isAtLeast(Lifecycle.State.STARTED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         if (!registry.currentState.isAtLeast(Lifecycle.State.RESUMED)) registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }

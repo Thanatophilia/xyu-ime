@@ -22,19 +22,20 @@ class ImePhase2Test {
     private val pkg = context.packageName
     private fun node(selector: BySelector): UiObject2 = requireNotNull(device.wait(Until.findObject(selector), 8_000)) { "Missing UI control: $selector" }
     private fun key(text: String) {
-        val textMatches = device.findObjects(By.text(text).pkg(pkg))
-        val matches = if (textMatches.isNotEmpty()) textMatches else device.findObjects(By.desc(text).pkg(pkg))
-        require(matches.isNotEmpty()) { "Missing key: $text" }
-        matches.last().click()
+        node(By.res("key:$text").pkg(pkg)).click()
         device.waitForIdle()
     }
     private fun description(text: String) {
-        if (text == "编辑工具") {
-            // The info strip's explicit accessibility semantics is the stable target for its
-            // short 28dp height; its visible label can be a separate UI node.
-            node(By.descContains("编辑工具").pkg(pkg)).click()
-        } else node(By.desc(text).pkg(pkg)).click()
+        node(By.res(if (text == "编辑工具") "edit_toggle" else "key:$text").pkg(pkg)).click()
         device.waitForIdle()
+    }
+    private fun editing() {
+        description("编辑工具")
+        node(By.res("key:全选").pkg(pkg))
+    }
+    private fun letters() {
+        description("编辑工具")
+        node(By.res("key:q").pkg(pkg))
     }
     private fun editor() = node(By.clazz("android.widget.EditText").pkg(pkg))
     private fun openEditor() {
@@ -42,7 +43,7 @@ class ImePhase2Test {
         repeat(3) {
             field.click()
             device.waitForIdle()
-            val keyboard = device.wait(Until.findObject(By.text("q").pkg(pkg)), 5_000)
+            val keyboard = device.wait(Until.findObject(By.res("key:q").pkg(pkg)), 5_000)
             if (keyboard != null) return
             field = editor()
         }
@@ -66,10 +67,6 @@ class ImePhase2Test {
             device.executeShellCommand("ime enable $id")
             device.executeShellCommand("ime set $id")
             device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
-            // This emulator-only user preference lets automated instrumentation seed the system
-            // clipboard without a foreground activity. The IME itself has no clipboard history.
-            device.executeShellCommand("settings put user_setup_complete 1")
-            device.executeShellCommand("cmd clipboard set text abxc")
             context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             openEditor()
             test()
@@ -85,22 +82,25 @@ class ImePhase2Test {
     @Test fun editingPanelMovesCursorSelectsCutsAndPastes() = withIme {
         listOf("a", "b", "c").forEach(::key)
         expectText("abc")
-        description("编辑工具")
+        editing()
         screenshot("phase2-editing")
         description("光标左移")
+        letters()
         key("x")
         expectText("abxc")
+        editing()
         key("全选")
-        assertTrue(device.wait(Until.hasObject(By.text("复制").enabled(true)), 3_000))
+        assertTrue(device.wait(Until.hasObject(By.res("key:复制").enabled(true)), 3_000))
         key("复制")
         key("全选")
         key("剪切")
         expectText("")
         key("粘贴")
         expectText("abxc")
-        key("行尾")
-        key("选择")
+        description("光标到行尾")
+        description("选择文字模式")
         description("光标左移")
+        letters()
         key("z")
         expectText("abxz")
         screenshot("phase2-text")
@@ -108,22 +108,26 @@ class ImePhase2Test {
 
     @Test fun completeEmojiDeleteAndPasswordClipboardProtection() = withIme {
         // The explicit sample fixture contains no personal/user clipboard content.
-        device.pressBack()
-        key("文本")
-        device.swipe(540, 1300, 540, 700, 20)
-        device.waitForIdle()
-        node(By.text("填入 emoji 样例").pkg(pkg)).click()
-        editor().click()
-        node(By.text("q").pkg(pkg))
+        val sample = "A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣éZ"
+        // UiAutomator's setText uses the editor accessibility API to seed the synthetic fixture;
+        // actual deletions below all go through the visible keyboard and InputConnection.
+        editor().text = sample
+        openEditor()
+        editing()
+        description("光标到行尾")
+        letters()
+        expectText(sample)
         val expected = listOf("A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣é", "A👨‍👩‍👧‍👦👍🏽🇨🇳1️⃣", "A👨‍👩‍👧‍👦👍🏽🇨🇳", "A👨‍👩‍👧‍👦👍🏽", "A👨‍👩‍👧‍👦", "A", "")
         expected.forEach { remaining -> description("删除，长按连续删除"); expectText(remaining) }
-        key("密码")
+        device.pressBack()
+        val mode = device.wait(Until.findObject(By.text("密码").pkg(pkg)), 5_000)
+        requireNotNull(mode).click()
         openEditor()
         key("a")
-        description("编辑工具")
+        editing()
         key("全选")
-        assertFalse(node(By.text("复制").pkg(pkg)).isEnabled)
-        assertFalse(node(By.text("剪切").pkg(pkg)).isEnabled)
+        assertFalse(node(By.res("key:复制").pkg(pkg)).isEnabled)
+        assertFalse(node(By.res("key:剪切").pkg(pkg)).isEnabled)
         screenshot("phase2-password")
     }
 }
