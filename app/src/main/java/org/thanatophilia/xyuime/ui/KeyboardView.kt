@@ -68,6 +68,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -306,12 +307,26 @@ private fun KeyboardSurface(
     // Always reserved, so pinyin composition cannot push or squeeze the letter keys.
     val stripHeight = if (compactLandscape) 34.dp else 46.dp
     val stripScroll = remember(state.candidateRevision) { LazyListState() }
+    val candidateCount by rememberUpdatedState(state.candidates.size)
+    val continuationStart by remember(stripScroll) {
+        derivedStateOf {
+            val layout = stripScroll.layoutInfo
+            // A newly appended prefix may not be measured yet; its existing visible cells
+            // still give a valid boundary. A new revision owns a new, initially empty state.
+            candidateContinuationStart(
+                layout.visibleItemsInfo.map { StripCandidateBounds(it.index, it.offset, it.size) },
+                layout.viewportStartOffset, layout.viewportEndOffset, candidateCount)
+        }
+    }
+    val drawerStart = continuationStart ?: 0
     val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
     var wordFilter by remember(state.candidateRevision) { mutableStateOf(CandidateWordFilter.All) }
     var syllableSelectionRequest by remember(state.candidateRevision) { mutableStateOf(0L) }
-    LaunchedEffect(selectedSyllable, wordFilter, drawerScroll, syllableSelectionRequest) { drawerScroll.scrollToItem(0) }
+    LaunchedEffect(selectedSyllable, wordFilter, drawerScroll, syllableSelectionRequest, drawerStart) {
+        drawerScroll.scrollToItem(0)
+    }
     val reveal by animateFloatAsState(if (state.candidatesExpanded) 1f else 0f,
         animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
@@ -327,7 +342,8 @@ private fun KeyboardSurface(
         verticalArrangement = Arrangement.spacedBy(rowGap),
     ) {
         if (state.preedit.isNotEmpty()) CandidateStrip(state, onAction, stripScroll,
-            Modifier.fillMaxWidth().height(stripHeight)) else InfoStrip(
+            Modifier.fillMaxWidth().height(stripHeight),
+            onToggle = { if (continuationStart != null) onAction(KeyboardAction.ToggleCandidates) }) else InfoStrip(
             state = state,
             onAction = onAction,
             fontScale = fontScale,
@@ -347,7 +363,7 @@ private fun KeyboardSurface(
                         selectedSyllable = it
                         syllableSelectionRequest++
                     }, wordFilter = wordFilter, onWordFilter = { wordFilter = it },
-                    scrollResetKey = syllableSelectionRequest,
+                    scrollResetKey = syllableSelectionRequest, continuationStart = continuationStart,
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
@@ -409,7 +425,7 @@ private fun KeyboardSurface(
 
 @Composable
 private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
-    scroll: LazyListState, modifier: Modifier) {
+    scroll: LazyListState, modifier: Modifier, onToggle: () -> Unit) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
     LaunchedEffect(scroll, state.candidates.size, state.loadingCandidates) {
@@ -424,13 +440,15 @@ private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) ->
         testTagsAsResourceId = true
         testTag = "candidate_strip"
     }, verticalAlignment = Alignment.CenterVertically) {
-            LazyRow(Modifier.weight(1f).fillMaxHeight(), state = scroll,
+            LazyRow(Modifier.weight(1f).fillMaxHeight().semantics {
+                testTagsAsResourceId = true; testTag = "candidate_strip_items"
+            }, state = scroll,
                 verticalAlignment = Alignment.CenterVertically) {
                 itemsIndexed(state.candidates, key = { index, _ -> index }) { index, candidate ->
                     CandidateCell(candidate, index, state, onAction, Modifier.fillMaxHeight())
                 }
             }
-            Box(Modifier.size(44.dp).clickable(onClick = { onAction(KeyboardAction.ToggleCandidates) })
+            Box(Modifier.size(44.dp).clickable(onClick = onToggle)
                 .semantics {
                     testTagsAsResourceId = true
                     testTag = "candidate_toggle"
@@ -463,7 +481,8 @@ private fun CandidateChevron(expanded: Boolean, color: Color, modifier: Modifier
 private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
     scroll: LazyGridState, syllableScroll: LazyListState, selectedSyllable: String?,
     onSelectSyllable: (String?) -> Unit, wordFilter: CandidateWordFilter,
-    onWordFilter: (CandidateWordFilter) -> Unit, scrollResetKey: Long, modifier: Modifier) {
+    onWordFilter: (CandidateWordFilter) -> Unit, scrollResetKey: Long, continuationStart: Int?,
+    modifier: Modifier) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
     val fontScale = LocalDensity.current.fontScale
@@ -471,8 +490,9 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
         drawerCandidates(state.candidates, state.candidateComments)
     }
     val choices = remember(candidates) { syllableChoices(candidates) }
-    val visible = remember(candidates, selectedSyllable, wordFilter) {
-        filterCandidates(candidates, selectedSyllable, wordFilter)
+    val visible = remember(candidates, selectedSyllable, wordFilter, continuationStart) {
+        if (continuationStart == null) emptyList() else
+            filterCandidates(continuationCandidates(candidates, continuationStart), selectedSyllable, wordFilter)
     }
     // Reaching the last currently-known syllables must also discover later engine groups.
     LaunchedEffect(syllableScroll, choices.size, state.candidates.size, state.loadingCandidates) {
@@ -485,7 +505,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
     }
     // The entire filtered prefix stays in one continuous grid. Both finger gestures and
     // the arrow controls act on this same LazyGridState; there is no fixed page index.
-    var screenStep by remember(state.candidateRevision, selectedSyllable, wordFilter, scrollResetKey) { mutableStateOf(0L) }
+    var screenStep by remember(state.candidateRevision, selectedSyllable, wordFilter, scrollResetKey, continuationStart) { mutableStateOf(0L) }
     val currentVisible by rememberUpdatedState(visible)
     // A new finger drag cancels an in-flight icon animation or deferred end-of-list step.
     LaunchedEffect(scroll) {
@@ -494,7 +514,8 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
         }
     }
     LaunchedEffect(scroll, visible.size, state.candidates.size, state.loadingCandidates,
-        state.hasMoreCandidates, selectedSyllable, wordFilter) {
+        state.hasMoreCandidates, selectedSyllable, wordFilter, continuationStart) {
+        if (continuationStart == null) return@LaunchedEffect
         snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
             .distinctUntilChanged().collect { last ->
                 if ((currentVisible.isEmpty() || last >= currentVisible.size - 8) &&
@@ -509,7 +530,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
         // A small overlap keeps a reference row visible even for different word widths.
         scroll.animateScrollBy(height * if (forward) 0.85f else -0.85f, tween(180))
     }
-    LaunchedEffect(screenStep, state.candidateRevision, selectedSyllable, wordFilter, scrollResetKey) {
+    LaunchedEffect(screenStep, state.candidateRevision, selectedSyllable, wordFilter, scrollResetKey, continuationStart) {
         if (screenStep != 0L) {
             val forward = screenStep > 0
             if (forward && !scroll.canScrollForward) {
@@ -584,13 +605,14 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                     CandidateCell(candidate.text, candidate.index, state, onAction,
                         Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
                 }
-                if (visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
+                if (continuationStart != null && visible.isEmpty() && !state.loadingCandidates && !state.hasMoreCandidates)
                     item(key = "empty", span = { GridItemSpan(columns) }) {
-                        Text("没有符合筛选的候选", Modifier.padding(12.dp).semantics {
+                        Text(if (selectedSyllable == null && wordFilter == CandidateWordFilter.All)
+                            "其余候选已显示在上方" else "没有符合筛选的后续候选", Modifier.padding(12.dp).semantics {
                             testTagsAsResourceId = true; testTag = "candidate_empty"
                         }, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
-                if (state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
+                if (continuationStart == null || state.loadingCandidates || (visible.isEmpty() && state.hasMoreCandidates)) item(key = "loading", span = { GridItemSpan(columns) }) {
                     Text("正在加载…", Modifier.padding(12.dp).semantics {
                         testTagsAsResourceId = true; testTag = "candidate_loading"
                     }, color = MaterialTheme.colorScheme.onSurfaceVariant,

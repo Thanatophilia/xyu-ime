@@ -54,7 +54,7 @@ class ImeCandidateFlowTest {
         "candidate_tools_page_down", "candidate_enter")
 
     private data class Cell(val index: Int, val text: String, val bounds: Rect)
-    private data class Layout(val chrome: Map<String, Rect>, val cells: List<Cell>) {
+    private data class Layout(val chrome: Map<String, Rect>, val cells: List<Cell>, val continuationStart: Int) {
         val grid get() = chrome.getValue("candidate_grid")
         val rows get() = cells.groupBy { it.bounds.top }.toSortedMap().values.map { row ->
             row.sortedBy { it.bounds.left }
@@ -78,7 +78,9 @@ class ImeCandidateFlowTest {
             }
             .filter { !it.bounds.isEmpty && Rect.intersects(grid, it.bounds) }
             .sortedWith(compareBy<Cell> { it.bounds.top }.thenBy { it.bounds.left })
-        return Layout(chromeTags.associateWith { Rect(node(it).visibleBounds) }, cells)
+        val strip = readCandidateStrip(instrumentation, device, context.packageName)
+        assertTrue("Strip geometry must expose actual intersecting candidates", strip.intersecting.isNotEmpty())
+        return Layout(chromeTags.associateWith { Rect(node(it).visibleBounds) }, cells, strip.continuationStart)
     }
 
     private fun settledLayout(): Layout {
@@ -159,6 +161,8 @@ class ImeCandidateFlowTest {
     private fun assertOrderAndPacking(layout: Layout, candidates: List<String>) {
         assertTrue("Visible cells required", layout.cells.isNotEmpty())
         layout.cells.forEach { cell ->
+            assertTrue("Drawer IDs must continue after the last fully visible strip candidate",
+                cell.index >= layout.continuationStart)
             assertEquals("Original candidate index must keep its text", candidates[cell.index], cell.text)
             assertTrue("Cell must stay inside the grid: $cell", layout.grid.contains(cell.bounds))
         }
@@ -208,11 +212,17 @@ class ImeCandidateFlowTest {
         device.executeShellCommand("cp ${hierarchy.absolutePath} $review/")
     }
 
+    private fun assertInitialContinuation(layout: Layout) {
+        assertEquals("Initial drawer must begin at the screen-derived strip continuation",
+            layout.continuationStart, layout.cells.first().index)
+    }
+
     @Test fun allModePacksTwoToFiveCharacterWordsAtNaturalWidths() {
         listOf("春风", "春风雨", "春风化雨", "春风化雨来").forEach { word ->
             val candidates = List(80) { word }
             withKeyboard(candidates) { measured ->
                 val layout = settledLayout()
+                assertInitialContinuation(layout)
                 if (word.length == 2) screenshot("phase3-candidate-flow-words")
                 assertOrderAndPacking(layout, candidates)
                 assertNaturalWidths(layout, measured)
@@ -266,6 +276,7 @@ class ImeCandidateFlowTest {
         val candidates = List(18) { "春风" } + List(16) { words }.flatten()
         withKeyboard(candidates) { measured ->
             var layout = settledLayout()
+            assertInitialContinuation(layout)
             val chromeBefore = layout.chrome
             val seenLengths = mutableSetOf<Int>()
             var savedMixed = false
@@ -320,6 +331,7 @@ class ImeCandidateFlowTest {
         }
         withKeyboard(candidates) { measured ->
             val all = settledLayout()
+            assertInitialContinuation(all)
             assertOrderAndPacking(all, candidates)
             assertNaturalWidths(all, measured)
             val firstAllRow = fullRows(all).first()
@@ -338,7 +350,10 @@ class ImeCandidateFlowTest {
                 assertTrue("Down rail must advance the continuous Single list", single.cells.first().index > previousFirst)
                 assertFiveColumns(single)
                 assertEquals("Single scrolling must leave rails/grid/controls pinned", all.chrome, single.chrome)
-                single.cells.forEach { cell -> assertEquals("Filtering must preserve original index/text", candidates[cell.index], cell.text) }
+                single.cells.forEach { cell ->
+                    assertTrue("Filtered drawer must still exclude the displayed strip prefix", cell.index >= single.continuationStart)
+                    assertEquals("Filtering must preserve original index/text", candidates[cell.index], cell.text)
+                }
             }
             val downFirst = single.cells.first().index
             node("candidate_tools_page_up").click()
@@ -361,7 +376,8 @@ class ImeCandidateFlowTest {
             val layout = settledLayout()
             assertTrue("Long-word fixture must actually exceed the grid", measured.getValue(longWord) > layout.grid.width())
             val first = layout.cells.first()
-            assertEquals("Long candidate must retain original index", 0, first.index)
+            assertInitialContinuation(layout)
+            assertEquals("Oversized intersecting candidate must retain original index", 0, first.index)
             assertTrue("Very long candidate must be capped at exactly the real grid width",
                 abs(first.bounds.width() - layout.grid.width()) <= 1)
             assertOrderAndPacking(layout, candidates)
