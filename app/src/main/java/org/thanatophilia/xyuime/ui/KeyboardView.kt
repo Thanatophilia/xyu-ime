@@ -605,7 +605,9 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
 private fun SyllableChoice(syllable: String?, active: Boolean, select: (String?) -> Unit,
     tag: String? = null, label: String? = null) {
     val shape = RoundedCornerShape(6.dp)
-    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 4.dp, vertical = 2.dp)
+    // Keep the clickable surface at least 48dp tall inside its 2dp top/bottom inset.
+    // Otherwise Compose expands accessibility/touch bounds past the pinned rail edge.
+    Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 4.dp, vertical = 2.dp)
         .clip(shape).background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
         .clickable { select(syllable) }
         .semantics {
