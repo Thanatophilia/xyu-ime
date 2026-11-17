@@ -647,7 +647,9 @@ class ImePhase3InputRegressionTest {
             strip.hasObject(By.res("floating_preedit")))
         assertFalse("Candidate strip must contain candidates/toggle, not an inline preedit",
             strip.hasObject(By.desc("拼音预编辑")))
-        assertTrue("Candidate row must still contain a selectable candidate", strip.hasObject(By.res("candidate:0")))
+        assertTrue("Candidate row must still contain a visible selectable candidate after scrolling",
+            strip.findObjects(By.res(java.util.regex.Pattern.compile("candidate:[0-9]+")))
+                .any { !it.visibleBounds.isEmpty && Rect.intersects(strip.visibleBounds, it.visibleBounds) })
         assertTrue("Candidate row must still contain its toggle", strip.hasObject(By.res("candidate_toggle")))
         return Rect(popup)
     }
