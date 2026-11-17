@@ -231,9 +231,13 @@ class ImeCandidateFlowTest {
 
     private fun swipeUp(layout: Layout): Layout {
         val grid = layout.grid
-        // Slow, short drag preserves overlapping rows instead of jumping a fixed page.
-        assertTrue("Grid drag must be injected", device.swipe(grid.centerX(), grid.bottom - 3,
-            grid.centerX(), grid.bottom - grid.height() / 3, 90))
+        // The fixture lives in an Activity, not an IME window. Start well inside the grid:
+        // its bottom edge can intersect Android's system home-gesture capture strip.
+        // Keep the drag slow and short so adjacent viewports retain overlapping rows.
+        val start = grid.top + grid.height() * 3 / 4
+        val end = grid.top + grid.height() * 2 / 5
+        assertTrue("Grid drag must be injected", device.swipe(grid.centerX(), start,
+            grid.centerX(), end, 90))
         return settledLayout()
     }
 
