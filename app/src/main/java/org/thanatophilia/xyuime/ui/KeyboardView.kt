@@ -10,8 +10,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.semantics.selected
 import kotlin.math.ceil
 import androidx.compose.foundation.lazy.LazyListState
@@ -532,8 +530,10 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             if (!forward || scroll.canScrollForward) scrollOneScreen(forward)
         }
     }
-    Row(modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
-        Column(Modifier.width(64.dp).fillMaxHeight()
+    BoxWithConstraints(modifier) {
+    val sideKeyWidth = KeyboardGeometry.edgeKeyWidthDp(maxWidth.value).dp
+    Row(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
+        Column(Modifier.width(sideKeyWidth).fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
             .semantics { testTagsAsResourceId = true; testTag = "candidate_syllables" }) {
             LazyColumn(state = syllableScroll, modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -550,28 +550,15 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             }, tag = "candidate_type", label = typeLabel)
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)))
-        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
-            val density = LocalDensity.current
-            val columns = (maxWidth.value / 28f).toInt().coerceAtLeast(1)
-            val columnWidth = with(density) { maxWidth.toPx() } / columns
-            val measurer = rememberTextMeasurer()
-            // Measure spans lazily for rows the grid visits, not every loaded candidate.
-            val widths = remember(visible, measurer, columnWidth, columns, density.fontScale) {
-                mutableMapOf<Int, Int>()
-            }
-            fun candidateSpan(candidate: DrawerCandidate): Int = widths.getOrPut(candidate.index) {
-                val textWidth = measurer.measure(candidate.text, TextStyle(fontSize = 20.sp),
-                    maxLines = 1, softWrap = false).size.width
-                val padding = with(density) { 20.dp.toPx() }
-                ceil((textWidth + padding) / columnWidth).toInt().coerceIn(minOf(2, columns), columns)
-            }
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            val columns = KeyboardGeometry.CANDIDATE_COLUMNS
             LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
                 modifier = Modifier.fillMaxSize().semantics {
                     testTagsAsResourceId = true
                     testTag = "candidate_grid"
                 }) {
                 itemsIndexed(visible, key = { _, candidate -> candidate.index },
-                    span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
+                    span = { _, candidate -> GridItemSpan(KeyboardGeometry.candidateSpan(candidate.text)) }) { _, candidate ->
                     CandidateCell(candidate.text, candidate.index, state, onAction,
                         Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
                 }
@@ -589,7 +576,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 }
             }
         }
-        Column(Modifier.width(56.dp).fillMaxHeight().padding(3.dp).semantics {
+        Column(Modifier.width(sideKeyWidth).fillMaxHeight().semantics {
             testTagsAsResourceId = true; testTag = "candidate_tools"
         }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val shape = RoundedCornerShape(6.dp)
@@ -610,6 +597,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 Modifier.fillMaxWidth().weight(1f), small = true, active = true, customTag = "candidate_enter",
                 icon = "enter", onClick = { onAction(KeyboardAction.CandidateCommit(state.candidateSession)) })
         }
+    }
     }
 }
 
@@ -643,7 +631,7 @@ private fun CandidateCell(candidate: String, index: Int, state: KeyboardUiState,
             role = Role.Button
             // The whole tap target has a label even when its inset text is clipped by scrolling.
             text = AnnotatedString(candidate)
-        }.padding(horizontal = if (expanded) 10.dp else 12.dp, vertical = if (expanded) 10.dp else 4.dp),
+        }.padding(horizontal = if (expanded) 4.dp else 12.dp, vertical = if (expanded) 10.dp else 4.dp),
         contentAlignment = Alignment.Center) {
         Text(candidate, modifier = Modifier.clearAndSetSemantics {},
             color = if (index == state.highlightedCandidate) MaterialTheme.colorScheme.primary
@@ -782,8 +770,10 @@ private fun AuxiliaryPanel(first: List<String>, second: List<String>, third: Lis
 @Composable
 private fun BottomBar(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit, fontScale: Float,
     compactLandscape: Boolean, keyShape: Shape, modifier: Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        KeyFace("！﹫#", "符号键盘", fontScale, keyShape, Modifier.weight(1.15f).fillMaxHeight(),
+    BoxWithConstraints(modifier) {
+    val sideKeyWidth = KeyboardGeometry.edgeKeyWidthDp(maxWidth.value).dp
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(KeyboardGeometry.KEY_GAP_DP.dp)) {
+        KeyFace("！﹫#", "符号键盘", fontScale, keyShape, Modifier.width(sideKeyWidth).fillMaxHeight(),
             active = state.page == KeyboardPage.Symbols, small = true, onClick = { onAction(KeyboardAction.ToggleSymbols) })
         KeyFace("123", "数字键盘", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
             active = state.page == KeyboardPage.Numbers, small = true, onClick = { onAction(KeyboardAction.ToggleNumbers) })
@@ -795,8 +785,9 @@ private fun BottomBar(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit
             onClick = { onAction(KeyboardAction.Text(state.period)) })
         KeyFace("", "切换语言，长按切换输入法", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
             onClick = { onAction(KeyboardAction.NextLanguage) }, onLongClick = { onAction(KeyboardAction.PickInputMethod) }, icon = "globe")
-        KeyFace(state.actionLabel, "回车：${state.actionLabel}", fontScale, keyShape, Modifier.weight(1.45f).fillMaxHeight(),
+        KeyFace(state.actionLabel, "回车：${state.actionLabel}", fontScale, keyShape, Modifier.width(sideKeyWidth).fillMaxHeight(),
             active = true, small = true, onClick = { onAction(KeyboardAction.Enter) })
+    }
     }
 }
 

@@ -865,6 +865,140 @@ class ImePhase3InputRegressionTest {
         assertEquals("Pinned type button must not move with the grid", type, node("candidate_type").visibleBounds)
     }
 
+    @Test fun candidateDrawerMatchesEqualBottomKeysAndShowsFiveSingleCharactersPerRow() = withChineseEditor {
+        node("keyboard_surface")
+        val editorBefore = settledEditorGeometry()
+        val keyboardBefore = Rect(node("keyboard_surface").visibleBounds)
+        // Measure ordinary keys before composition; drawer controls must match these real targets.
+        val symbolBefore = Rect(node("key:符号键盘").visibleBounds)
+        val enterBefore = Rect(node("key:回车：完成").visibleBounds)
+        fun assertWithinPixel(message: String, expected: Int, actual: Int) {
+            assertTrue("$message; expected=$expected, actual=$actual", abs(expected - actual) <= 1)
+        }
+        fun assertEditorAndKeyboardUnchanged(stage: String) {
+            assertEquals("$stage must preserve editor bounds, insets and focus", editorBefore, settledEditorGeometry())
+            assertEquals("$stage must preserve keyboard bounds", keyboardBefore, node("keyboard_surface").visibleBounds)
+        }
+        floatingScreenshot("phase3-bottom-keys-equal-size")
+        assertFalse("Symbol key must have visible bounds", symbolBefore.isEmpty)
+        assertFalse("Enter key must have visible bounds", enterBefore.isEmpty)
+        assertWithinPixel("Ordinary symbol and Enter keys must have equal widths", symbolBefore.width(), enterBefore.width())
+        assertWithinPixel("Ordinary symbol and Enter keys must have equal heights", symbolBefore.height(), enterBefore.height())
+        val density = context.resources.displayMetrics.density
+        if (context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
+            val portraitHeight = (47 * density).roundToInt()
+            assertWithinPixel("Portrait symbol key must remain 47dp tall", portraitHeight, symbolBefore.height())
+            assertWithinPixel("Portrait Enter key must remain 47dp tall", portraitHeight, enterBefore.height())
+        }
+
+        typeLetters("shi")
+        val composing = awaitSnapshot("shi must be composing before measuring the drawer") {
+            it.composing == "shi" && it.actions.isEmpty()
+        }
+        settledCandidates("candidate_strip")
+        assertEditorAndKeyboardUnchanged("Composition")
+        assertEquals("Composition must preserve symbol key bounds", symbolBefore, node("key:符号键盘").visibleBounds)
+        assertEquals("Composition must preserve Enter key bounds", enterBefore, node("key:回车：完成").visibleBounds)
+        tap("candidate_toggle")
+        settledViewport()
+        assertEditorAndKeyboardUnchanged("Expansion")
+        tap("candidate_type")
+        val firstViewport = settledViewport()
+        val type = node("candidate_type")
+        assertTrue("Type cycle must actually select Single mode",
+            type.text == "单字" || type.hasObject(By.text("单字")))
+        val typeBefore = Rect(type.visibleBounds)
+        floatingScreenshot("phase3-candidate-five-columns")
+
+        val drawer = Rect(node("candidate_drawer").visibleBounds)
+        val rail = Rect(node("candidate_syllables").visibleBounds)
+        val grid = Rect(node("candidate_grid").visibleBounds)
+        val tools = Rect(node("candidate_tools").visibleBounds)
+        assertFalse("Expanded drawer must have visible bounds", drawer.isEmpty)
+        assertFalse("Pinyin rail must have visible bounds", rail.isEmpty)
+        assertFalse("Candidate grid must have visible bounds", grid.isEmpty)
+        assertFalse("Right tools rail must have visible bounds", tools.isEmpty)
+        assertTrue("Drawer must contain both rails and the grid",
+            drawer.contains(rail) && drawer.contains(grid) && drawer.contains(tools))
+        assertTrue("Rails must flank the grid without overlap", rail.right <= grid.left && grid.right <= tools.left)
+        assertWithinPixel("Pinyin rail must match the ordinary symbol key width", symbolBefore.width(), rail.width())
+        assertWithinPixel("Pinyin rail must align with the ordinary symbol key left edge", symbolBefore.left, rail.left)
+        assertWithinPixel("Pinyin rail must align with the drawer left edge", drawer.left, rail.left)
+        assertWithinPixel("Tools rail must match the ordinary Enter key width", enterBefore.width(), tools.width())
+        assertWithinPixel("Tools rail must align with the ordinary Enter key right edge", enterBefore.right, tools.right)
+        assertWithinPixel("Tools rail must align with the drawer right edge", drawer.right, tools.right)
+        val controls = listOf("candidate_delete", "candidate_tools_page_up", "candidate_tools_page_down", "candidate_enter")
+            .map { tag -> tag to Rect(node(tag).visibleBounds) }
+        controls.forEach { (tag, bounds) ->
+            assertFalse("$tag must have visible bounds", bounds.isEmpty)
+            assertTrue("$tag must stay inside the right rail", tools.contains(bounds))
+            // Measure each visible button, not just its parent: horizontal padding must fail.
+            assertWithinPixel("$tag must match the ordinary Enter key width", enterBefore.width(), bounds.width())
+            assertWithinPixel("$tag must align with the ordinary Enter left edge", enterBefore.left, bounds.left)
+            assertWithinPixel("$tag must align with the ordinary Enter right edge", enterBefore.right, bounds.right)
+            assertWithinPixel("$tag must have no left inset in its rail", tools.left, bounds.left)
+            assertWithinPixel("$tag must have no right inset in its rail", tools.right, bounds.right)
+        }
+        assertTrue("Right controls must retain delete/up/down/enter order", controls.zipWithNext().all { (a, b) ->
+            a.second.bottom <= b.second.top
+        })
+        assertTrue("Type cycle must remain inside the left rail", rail.contains(typeBefore))
+        assertTrue("Type cycle must stay at the bottom left",
+            typeBefore.left - rail.left <= ceil(5 * density).toInt() + 1 &&
+                drawer.bottom - typeBefore.bottom <= ceil(3 * density).toInt() + 1)
+
+        data class Cell(val text: String, val bounds: Rect)
+        val cells = node("candidate_grid")
+            .findObjects(By.res(java.util.regex.Pattern.compile("candidate:[0-9]+")))
+            .map { Cell(candidateText(it), Rect(it.visibleBounds)) }
+            .filter { !it.bounds.isEmpty && Rect.intersects(grid, it.bounds) }
+            .sortedWith(compareBy<Cell> { it.bounds.top }.thenBy { it.bounds.left })
+        assertTrue("Single mode must expose visible candidate cells", cells.isNotEmpty())
+        assertTrue("Every visible Single candidate must contain exactly one Unicode code point", cells.all {
+            it.text.codePointCount(0, it.text.length) == 1
+        })
+        // Ignore a clipped last row, not a short row: every fully visible row must fill five slots.
+        val minimumCellHeight = (48 * density).roundToInt()
+        val completeRows = cells.groupBy { it.bounds.top }.toSortedMap().values.filter { row ->
+            row.all { grid.contains(it.bounds) && it.bounds.height() >= minimumCellHeight - 1 }
+        }
+        assertTrue("shi must provide at least one complete visible candidate row", completeRows.isNotEmpty())
+        completeRows.forEachIndexed { index, row ->
+            assertEquals("Complete single-character row $index must contain exactly FIVE cells: $row", 5, row.size)
+            assertWithinPixel("Row $index must start at the grid left edge", grid.left, row.first().bounds.left)
+            assertWithinPixel("Row $index must end at the grid right edge", grid.right, row.last().bounds.right)
+            row.forEach { cell ->
+                assertWithinPixel("Single-character cells must have equal widths", row.first().bounds.width(), cell.bounds.width())
+            }
+            assertTrue("Single-character row $index must not overlap", row.zipWithNext().all { (a, b) ->
+                a.bounds.right <= b.bounds.left
+            })
+        }
+        assertEditorAndKeyboardUnchanged("Single filtering")
+        assertEquals("Expansion and filtering must preserve composition and actions", composing, snapshot())
+        tap("candidate_tools_page_down")
+        val nextViewport = settledViewport()
+        assertTrue("Down control must still advance the continuous Single grid",
+            nextViewport.cells.first().index > firstViewport.cells.first().index)
+        assertTrue("Scrolling must preserve Single mode", nextViewport.cells.all {
+            it.text.codePointCount(0, it.text.length) == 1
+        })
+        assertEquals("Type cycle must stay pinned while scrolling", typeBefore, node("candidate_type").visibleBounds)
+        tap("candidate_tools_page_up")
+        val previousViewport = settledViewport()
+        assertTrue("Up control must still move upwards in the continuous grid",
+            previousViewport.cells.first().index < nextViewport.cells.first().index)
+        assertEquals("Type cycle must stay pinned after scrolling up", typeBefore, node("candidate_type").visibleBounds)
+        assertEditorAndKeyboardUnchanged("Candidate scrolling")
+        assertEquals("Candidate scrolling must preserve composition and actions", composing, snapshot())
+
+        tap("candidate_toggle")
+        assertEquals("Collapse must restore the original symbol key bounds", symbolBefore, node("key:符号键盘").visibleBounds)
+        assertEquals("Collapse must restore the original Enter key bounds", enterBefore, node("key:回车：完成").visibleBounds)
+        assertEditorAndKeyboardUnchanged("Collapse")
+        assertEquals("Collapse must preserve composition and actions", composing, snapshot())
+    }
+
     @Test fun candidateStripDoesNotResizeLetterKeys() = withChineseEditor {
         // The strip is reserved above the key area. Composition may only change its contents;
         // it must not move or shrink the letters or the fixed bottom row.
