@@ -202,6 +202,49 @@ class ImePhase3InputRegressionTest {
         noCandidates()
     }
 
+    @Test fun horizontalStripDragDismissesRealImeDrawerWithoutEditingComposition() = withChineseEditor {
+        typeLetters("shi")
+        val before = awaitSnapshot("shi must be composing before the drawer gesture") {
+            it.composing == "shi" && it.actions.isEmpty()
+        }
+        val geometry = settledEditorGeometry()
+        val keyboard = Rect(node("keyboard_surface").visibleBounds)
+        tap("candidate_toggle")
+        settledCandidates()
+        val stripBefore = readCandidateStrip(instrumentation, device, pkg)
+        val bounds = stripBefore.viewport
+        assertTrue(device.swipe(bounds.left + bounds.width() * 4 / 5, bounds.centerY(),
+            bounds.left + bounds.width() / 5, bounds.centerY(), 60))
+        assertTrue("Dragging the header must close the actual IME drawer",
+            device.waitForFreshGone(By.res("candidate_grid").pkg(pkg), 5_000))
+        node("key:q")
+        assertEquals("Header gesture must not change code, text or editor action", before, snapshot())
+        assertEquals("Header gesture must not resize/move the editor", geometry, settledEditorGeometry())
+        assertEquals("The keyboard stays the same size after dismissal", keyboard, node("keyboard_surface").visibleBounds)
+        assertFloatingPreedit("shi")
+        val stripAfter = readCandidateStrip(instrumentation, device, pkg)
+        assertTrue("The same dismissal gesture must keep horizontally scrolling the header",
+            stripAfter.continuationStart > stripBefore.continuationStart)
+        floatingScreenshot("phase3-strip-drag-closed-real-ime")
+        tap("candidate_toggle")
+        val reopened = settledCandidates()
+        assertEquals("Reopening must continue after the new strip boundary",
+            stripAfter.continuationStart, reopened.first().index)
+        val grid = node("candidate_grid").visibleBounds
+        device.swipe(grid.centerX(), grid.top + grid.height() * 3 / 4,
+            grid.centerX(), grid.top + grid.height() / 3, 50)
+        node("candidate_grid")
+        assertEquals("Vertical drawer scrolling must not dismiss or edit composition", before, snapshot())
+        // Reverse header dragging is a dismissal too, never a toggle that reopens.
+        val reverse = readCandidateStrip(instrumentation, device, pkg).viewport
+        device.swipe(reverse.left + reverse.width() / 5, reverse.centerY(),
+            reverse.left + reverse.width() * 4 / 5, reverse.centerY(), 60)
+        assertTrue(device.waitForFreshGone(By.res("candidate_grid").pkg(pkg), 5_000))
+        node("key:q")
+        assertEquals(before, snapshot())
+        assertEquals(geometry, settledEditorGeometry())
+    }
+
     @Test fun drawerScrollDoesNotSelectOrExposeOrdinaryKeys() = withChineseEditor {
         typeLetters("shi") // Many candidates; do not depend on dictionary ordering.
         val before = awaitSnapshot("shi must be composing") { it.composing == "shi" }

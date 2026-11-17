@@ -216,6 +216,12 @@ class ImeCandidateContinuationTest {
         instrumentation.waitForIdleSync()
     }
 
+    private fun assertDrawerClosed() {
+        assertTrue("Horizontal strip drag must finish the drawer's closing animation",
+            device.waitForFreshGone(By.res("candidate_grid").pkg(context.packageName), 5_000))
+        assertNotNull("Closing must restore the ordinary keyboard", node("key:q"))
+    }
+
     private fun swipeStrip(forward: Boolean = true): CandidateStripSnapshot {
         val bounds = strip().viewport
         val left = bounds.left + bounds.width() / 5
@@ -254,8 +260,13 @@ class ImeCandidateContinuationTest {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
                         XyuKeyboard(state = fixture.state, onAction = { action ->
                             fixture.actions += action
-                            if (action == KeyboardAction.ToggleCandidates) fixture.state = fixture.state.copy(
-                                candidatesExpanded = !fixture.state.candidatesExpanded)
+                            when (action) {
+                                KeyboardAction.ToggleCandidates -> fixture.state = fixture.state.copy(
+                                    candidatesExpanded = !fixture.state.candidatesExpanded)
+                                is KeyboardAction.CollapseCandidates -> if (action.revision == fixture.state.candidateRevision)
+                                    fixture.state = fixture.state.copy(candidatesExpanded = false)
+                                else -> Unit
+                            }
                         })
                     }
                 }
@@ -318,35 +329,47 @@ class ImeCandidateContinuationTest {
         }
     }
 
-    @Test fun horizontalScrollBeforeAndDuringExpansionTracksCutoffAndReopenPreservesVerticalPosition() {
+    @Test fun horizontalStripDragClosesDrawerAndReopeningContinuesAtItsNewPosition() {
         val source = candidates()
-        withKeyboard(source) {
+        withKeyboard(source) { fixture ->
             val initial = strip()
             var moved = swipeStrip()
             if (moved.continuationStart <= initial.continuationStart) moved = swipeStrip()
             assertTrue("Collapsed horizontal drag must advance raw cutoff", moved.continuationStart > initial.continuationStart)
+            assertDrawerClosed()
             toggle()
             assertStartsAt(moved, source)
             val advanced = swipeStrip()
-            assertTrue("Expanded strip must remain independently horizontally scrollable",
+            assertTrue("Horizontal drag must still scroll the strip as it closes the drawer",
                 advanced.continuationStart > moved.continuationStart)
+            assertDrawerClosed()
+            screenshot("phase3-candidate-strip-drag-closed")
+            toggle()
             assertStartsAt(advanced, source)
             val reversed = swipeStrip(forward = false)
-            assertTrue("Reverse strip drag must lower cutoff while expanded", reversed.continuationStart < advanced.continuationStart)
+            assertTrue("Reverse strip drag must lower cutoff while closing", reversed.continuationStart < advanced.continuationStart)
+            assertDrawerClosed()
+            toggle()
             assertStartsAt(reversed, source)
             var verticallyScrolled = swipeDrawer()
             if (verticallyScrolled.cells.first().index <= reversed.continuationStart) verticallyScrolled = swipeDrawer()
-            assertTrue("Vertical fixture drag must actually advance drawer", verticallyScrolled.cells.first().index > reversed.continuationStart)
+            assertTrue("Vertical drawer drag must move candidates WITHOUT dismissing the page",
+                verticallyScrolled.cells.first().index > reversed.continuationStart)
             assertSuffix(verticallyScrolled, source, reversed.continuationStart)
             screenshot("phase3-candidate-continuation-scrolled")
             toggle()
-            val collapsed = strip()
-            assertEquals("Collapsing must preserve horizontal cutoff", reversed, collapsed)
-            assertFalse("Drawer must finish closing", device.hasObject(By.res("candidate_grid").pkg(context.packageName)))
+            assertDrawerClosed()
+            assertEquals("Collapsing must preserve horizontal cutoff", reversed, strip())
             toggle()
             val reopened = drawer()
             assertEquals("Reopening unchanged cutoff must preserve vertical IDs and pixel offsets", verticallyScrolled, reopened)
             assertSuffix(reopened, source, reversed.continuationStart)
+            instrumentation.runOnMainSync {
+                val dismissals = fixture.actions.filterIsInstance<KeyboardAction.CollapseCandidates>()
+                assertEquals("Only the two expanded strip drags request dismissal", 2, dismissals.size)
+                assertTrue("Every dismissal belongs to the current composition", dismissals.all { it.revision == 41L })
+            }
+            assertTrue("Strip and drawer drags must never select a candidate", fixture.selections().isEmpty())
         }
     }
 
@@ -364,6 +387,8 @@ class ImeCandidateContinuationTest {
             assertTrue("Swipe must move within the oversized cell", moved.intersecting.first().bounds.left < initial.intersecting.first().bounds.left)
             assertTrue("Oversized cell must still have no fully visible item", moved.fullyVisible.isEmpty())
             assertEquals("No-full-visible fallback must keep the intersecting ID", 0, moved.continuationStart)
+            assertDrawerClosed()
+            toggle()
             assertStartsAt(moved, source)
         }
     }

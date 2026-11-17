@@ -68,6 +68,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
 import org.thanatophilia.xyuime.BuildConfig
@@ -179,6 +180,8 @@ sealed interface KeyboardAction {
     data class CandidateBackspace(val session: Int) : KeyboardAction
     data class CandidateCommit(val session: Int) : KeyboardAction
     data object ToggleCandidates : KeyboardAction
+    /** Idempotent gesture dismissal; a late drag must never reopen another composition. */
+    data class CollapseCandidates(val revision: Long) : KeyboardAction
     data object NextLanguage : KeyboardAction
 
     data object PickInputMethod : KeyboardAction
@@ -320,7 +323,13 @@ private fun KeyboardSurface(
                 layout.viewportStartOffset, layout.viewportEndOffset, candidateCount)
         }
     }
-    val drawerStart = continuationStart
+    // Keep the retiring drawer anchored to its last expanded content while the header
+    // continues scrolling. Only the next expansion adopts the newly computed suffix.
+    var retainedDrawerStart by remember(state.candidateRevision) { mutableStateOf<Int?>(null) }
+    val drawerStart = if (state.candidatesExpanded) continuationStart else retainedDrawerStart
+    SideEffect {
+        if (state.candidatesExpanded) retainedDrawerStart = continuationStart
+    }
     if (BuildConfig.DEBUG) LaunchedEffect(stripScroll) {
         snapshotFlow {
             val layout = stripScroll.layoutInfo
@@ -378,7 +387,7 @@ private fun KeyboardSurface(
                         selectedSyllable = it
                         syllableSelectionRequest++
                     }, wordFilter = wordFilter, onWordFilter = { wordFilter = it },
-                    scrollResetKey = syllableSelectionRequest, continuationStart = continuationStart,
+                    scrollResetKey = syllableSelectionRequest, continuationStart = drawerStart,
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
@@ -444,6 +453,13 @@ private fun CandidateStrip(state: KeyboardUiState, onAction: (KeyboardAction) ->
     scroll: LazyListState, modifier: Modifier, onToggle: () -> Unit) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
+    LaunchedEffect(scroll) {
+        scroll.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start && current.candidatesExpanded) {
+                action(KeyboardAction.CollapseCandidates(current.candidateRevision))
+            }
+        }
+    }
     LaunchedEffect(scroll, state.candidates.size, state.loadingCandidates) {
         snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
             .distinctUntilChanged().collect { last ->

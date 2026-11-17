@@ -414,6 +414,13 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     }
 
     private fun handleAction(action: KeyboardAction) {
+        if (action is KeyboardAction.CollapseCandidates) {
+            // Dismiss UI immediately, even while native work is queued. This does not edit
+            // text or enqueue a toggle that could reopen the drawer in a later session.
+            if (chineseSession.matches(action.revision) && keyboardState.candidatesExpanded)
+                keyboardState = keyboardState.copy(candidatesExpanded = false)
+            return
+        }
         candidateToolSession(action)?.let { session ->
             if (!candidateToolValid(action, session)) return
             // A held delete can produce events faster than native Rime replies. Keep
@@ -528,7 +535,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             is KeyboardAction.MoveCursor -> moveCursor(action.direction)
             KeyboardAction.NextLanguage, KeyboardAction.ToggleCandidates,
             is KeyboardAction.SelectCandidate, is KeyboardAction.LoadMoreCandidates,
-            is KeyboardAction.SetChinese,
+            is KeyboardAction.CollapseCandidates, is KeyboardAction.SetChinese,
             is KeyboardAction.CandidateBackspace,
             is KeyboardAction.CandidateCommit -> Unit
             KeyboardAction.PickInputMethod -> getSystemService(InputMethodManager::class.java).showInputMethodPicker()
