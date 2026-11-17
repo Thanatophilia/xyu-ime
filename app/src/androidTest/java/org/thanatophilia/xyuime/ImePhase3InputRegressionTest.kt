@@ -884,12 +884,9 @@ class ImePhase3InputRegressionTest {
         assertFalse("Enter key must have visible bounds", enterBefore.isEmpty)
         assertWithinPixel("Ordinary symbol and Enter keys must have equal widths", symbolBefore.width(), enterBefore.width())
         assertWithinPixel("Ordinary symbol and Enter keys must have equal heights", symbolBefore.height(), enterBefore.height())
+        // Accessibility bounds may expand to the system minimum touch target. Compare
+        // the two real controls and later restoration, not an unrelated fixed dp height.
         val density = context.resources.displayMetrics.density
-        if (context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
-            val portraitHeight = (47 * density).roundToInt()
-            assertWithinPixel("Portrait symbol key must remain 47dp tall", portraitHeight, symbolBefore.height())
-            assertWithinPixel("Portrait Enter key must remain 47dp tall", portraitHeight, enterBefore.height())
-        }
 
         typeLetters("shi")
         val composing = awaitSnapshot("shi must be composing before measuring the drawer") {
