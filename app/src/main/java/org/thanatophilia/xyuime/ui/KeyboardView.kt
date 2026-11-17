@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -68,10 +69,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.key
-import org.thanatophilia.xyuime.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -311,38 +309,27 @@ private fun KeyboardSurface(
     val rowGap = if (compactLandscape) 3.dp else 5.dp
     // Always reserved, so pinyin composition cannot push or squeeze the letter keys.
     val stripHeight = if (compactLandscape) 34.dp else 46.dp
-    val stripScroll = remember(state.candidateRevision) { LazyListState() }
+    // Measure the real header width, but capture its continuation only at the initial
+    // leftmost position. Horizontal browsing must never replace this composition's origin.
+    var stripWidthPx by remember { mutableStateOf(0) }
+    val stripScroll = remember(state.candidateRevision, stripWidthPx, density.density, fontScale) { LazyListState() }
     val candidateCount by rememberUpdatedState(state.candidates.size)
-    val continuationStart by remember(stripScroll) {
-        derivedStateOf {
-            val layout = stripScroll.layoutInfo
-            // A newly appended prefix may not be measured yet; its existing visible cells
-            // still give a valid boundary. A new revision owns a new, initially empty state.
-            candidateContinuationStart(
-                layout.visibleItemsInfo.map { StripCandidateBounds(it.index, it.offset, it.size) },
-                layout.viewportStartOffset, layout.viewportEndOffset, candidateCount)
-        }
-    }
-    // Keep the retiring drawer anchored to its last expanded content while the header
-    // continues scrolling. Only the next expansion adopts the newly computed suffix.
-    var retainedDrawerStart by remember(state.candidateRevision) { mutableStateOf<Int?>(null) }
-    val drawerStart = if (state.candidatesExpanded) continuationStart else retainedDrawerStart
-    SideEffect {
-        if (state.candidatesExpanded) retainedDrawerStart = continuationStart
-    }
-    if (BuildConfig.DEBUG) LaunchedEffect(stripScroll) {
+    var continuationStart by remember(stripScroll) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(stripScroll) {
         snapshotFlow {
             val layout = stripScroll.layoutInfo
-            val cells = layout.visibleItemsInfo.joinToString { "${it.index}:${it.offset}+${it.size}" }
-            "viewport=${layout.viewportStartOffset}..${layout.viewportEndOffset} " +
-                "first=${stripScroll.firstVisibleItemIndex}:${stripScroll.firstVisibleItemScrollOffset} " +
-                "next=$continuationStart cells=[$cells]"
-        }.distinctUntilChanged().collect { android.util.Log.d("XyuContinuation", it) }
+            if (layout.totalItemsCount != candidateCount) null else initialCandidateContinuationStart(
+                layout.visibleItemsInfo.map { StripCandidateBounds(it.index, it.offset, it.size) },
+                layout.viewportStartOffset, layout.viewportEndOffset, candidateCount,
+                stripScroll.firstVisibleItemIndex, stripScroll.firstVisibleItemScrollOffset)
+        }.collect { initialStart ->
+            if (continuationStart == null && initialStart != null) continuationStart = initialStart
+        }
     }
-    // A different strip suffix is a new drawer origin, not a keyed-item anchor to retain.
-    // This state lives outside the expanded branch, so reopening an unchanged suffix
-    // preserves its vertical position while a moved strip starts at its exact successor.
-    val drawerScroll = remember(state.candidateRevision, drawerStart) { LazyGridState() }
+    val drawerStart = continuationStart
+    // Lives outside the expanded branch. Header drags still close the drawer, but neither
+    // moving the header nor reopening the same composition changes its vertical anchor.
+    val drawerScroll = remember(state.candidateRevision, stripScroll) { LazyGridState() }
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
     var wordFilter by remember(state.candidateRevision) { mutableStateOf(CandidateWordFilter.All) }
@@ -365,7 +352,7 @@ private fun KeyboardSurface(
         verticalArrangement = Arrangement.spacedBy(rowGap),
     ) {
         if (state.preedit.isNotEmpty()) CandidateStrip(state, onAction, stripScroll,
-            Modifier.fillMaxWidth().height(stripHeight),
+            Modifier.fillMaxWidth().height(stripHeight).onSizeChanged { stripWidthPx = it.width },
             onToggle = { if (continuationStart != null) onAction(KeyboardAction.ToggleCandidates) }) else InfoStrip(
             state = state,
             onAction = onAction,

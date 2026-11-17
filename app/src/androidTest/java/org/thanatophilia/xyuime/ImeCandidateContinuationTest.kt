@@ -329,41 +329,42 @@ class ImeCandidateContinuationTest {
         }
     }
 
-    @Test fun horizontalStripDragClosesDrawerAndReopeningContinuesAtItsNewPosition() {
+    @Test fun horizontalStripDragClosesDrawerButReopeningKeepsItsInitialBoundary() {
         val source = candidates()
         withKeyboard(source) { fixture ->
             val initial = strip()
+            val fixedStart = initial.continuationStart
             var moved = swipeStrip()
-            if (moved.continuationStart <= initial.continuationStart) moved = swipeStrip()
-            assertTrue("Collapsed horizontal drag must advance raw cutoff", moved.continuationStart > initial.continuationStart)
+            if (moved.continuationStart <= fixedStart) moved = swipeStrip()
+            assertTrue("Collapsed horizontal drag must advance the visible strip", moved.continuationStart > fixedStart)
             assertDrawerClosed()
             toggle()
-            assertStartsAt(moved, source)
+            assertStartsAt(initial, source)
             val advanced = swipeStrip()
             assertTrue("Horizontal drag must still scroll the strip as it closes the drawer",
                 advanced.continuationStart > moved.continuationStart)
             assertDrawerClosed()
             screenshot("phase3-candidate-strip-drag-closed")
             toggle()
-            assertStartsAt(advanced, source)
+            assertStartsAt(initial, source)
             val reversed = swipeStrip(forward = false)
-            assertTrue("Reverse strip drag must lower cutoff while closing", reversed.continuationStart < advanced.continuationStart)
+            assertTrue("Reverse strip drag must lower the visible cutoff", reversed.continuationStart < advanced.continuationStart)
             assertDrawerClosed()
             toggle()
-            assertStartsAt(reversed, source)
+            assertStartsAt(initial, source)
             var verticallyScrolled = swipeDrawer()
-            if (verticallyScrolled.cells.first().index <= reversed.continuationStart) verticallyScrolled = swipeDrawer()
+            if (verticallyScrolled.cells.first().index <= fixedStart) verticallyScrolled = swipeDrawer()
             assertTrue("Vertical drawer drag must move candidates WITHOUT dismissing the page",
-                verticallyScrolled.cells.first().index > reversed.continuationStart)
-            assertSuffix(verticallyScrolled, source, reversed.continuationStart)
+                verticallyScrolled.cells.first().index > fixedStart)
+            assertSuffix(verticallyScrolled, source, fixedStart)
             screenshot("phase3-candidate-continuation-scrolled")
             toggle()
             assertDrawerClosed()
-            assertEquals("Collapsing must preserve horizontal cutoff", reversed, strip())
+            assertEquals("Collapsing must preserve horizontal strip position", reversed, strip())
             toggle()
             val reopened = drawer()
-            assertEquals("Reopening unchanged cutoff must preserve vertical IDs and pixel offsets", verticallyScrolled, reopened)
-            assertSuffix(reopened, source, reversed.continuationStart)
+            assertEquals("Reopening unchanged origin must preserve vertical IDs and pixel offsets", verticallyScrolled, reopened)
+            assertSuffix(reopened, source, fixedStart)
             instrumentation.runOnMainSync {
                 val dismissals = fixture.actions.filterIsInstance<KeyboardAction.CollapseCandidates>()
                 assertEquals("Only the two expanded strip drags request dismissal", 2, dismissals.size)
@@ -389,7 +390,7 @@ class ImeCandidateContinuationTest {
             assertEquals("No-full-visible fallback must keep the intersecting ID", 0, moved.continuationStart)
             assertDrawerClosed()
             toggle()
-            assertStartsAt(moved, source)
+            assertStartsAt(initial, source)
         }
     }
 
@@ -400,9 +401,9 @@ class ImeCandidateContinuationTest {
             val moved = swipeStrip()
             assertTrue("Old revision must have a noninitial horizontal cutoff", moved.continuationStart > initial.continuationStart)
             toggle()
-            assertStartsAt(moved, original)
+            assertStartsAt(initial, original)
             val scrolled = swipeDrawer()
-            assertTrue("Old revision must have a vertical offset", scrolled.cells.first().index > moved.continuationStart)
+            assertTrue("Old revision must have a vertical offset", scrolled.cells.first().index > initial.continuationStart)
             // Equal candidate strings still represent a new revision; reset cannot depend on text inequality.
             fixture.update { it.copy(candidateRevision = 42L) }
             val reset = strip()
@@ -417,18 +418,22 @@ class ImeCandidateContinuationTest {
         }
     }
 
-    @Test fun appendingAtLoadedStripEndRecomputesOnlyActualVisibilityAndKeepsGlobalIds() {
+    @Test fun appendingCandidatesKeepsInitialContinuationOriginAndGlobalIds() {
         val original = List(8) { "春" }
         withKeyboard(original) { fixture ->
-            var end = strip()
+            val initial = strip()
+            val fixedStart = initial.continuationStart
+            var end = swipeStrip()
             var attempts = 0
             while (end.fullyVisible.none { it.index == original.lastIndex } && attempts++ < 8) end = swipeStrip()
             assertTrue("Fixture must reach the last loaded strip candidate", end.fullyVisible.any { it.index == original.lastIndex })
-            assertEquals("All loaded candidates through end have been displayed", original.size, end.continuationStart)
+            assertTrue("Initial boundary must be within the loaded candidate range", fixedStart in 0..original.size)
             val anchor = end.intersecting.first()
-            // Append while the drawer is already open and empty at the current loaded end.
+            // Appending while expanded must keep the initial continuation origin and native IDs.
             toggle()
-            settled("Empty continuation grid", ::readDrawer, { it.cells.isEmpty() })
+            val beforeAppend = settled("Initial continuation drawer", ::readDrawer)
+            if (beforeAppend.cells.isNotEmpty()) assertSuffix(beforeAppend, original, fixedStart)
+            val expectedFirst = beforeAppend.cells.firstOrNull()?.index ?: fixedStart
             val appended = original + candidates(count = 180)
             fixture.update { it.copy(candidates = appended,
                 candidateComments = List(appended.size) { "chun" }) }
@@ -437,11 +442,16 @@ class ImeCandidateContinuationTest {
                 "Append must preserve the first visible raw strip anchor: before=$end, after=$after"
             }
             assertEquals("Append must not jump the strip back to start or change anchor offset", anchor.bounds, retained.bounds)
-            assertTrue("Appending must not reduce a cutoff at the loaded end", after.continuationStart >= original.size)
-            assertTrue("A nonvisible appended tail must not count as already shown", after.continuationStart < appended.lastIndex)
-            val result = assertStartsAt(after, appended)
-            assertTrue("New drawer candidates must retain global numbering, not restart at zero",
-                result.cells.all { it.index >= original.size })
+            assertTrue("The strip is still horizontally scrolled after append",
+                after.intersecting.first().index >= anchor.index)
+            val result = drawer()
+            assertEquals("Appending must keep the drawer anchored at the initial boundary",
+                expectedFirst, result.cells.first().index)
+            assertSuffix(result, appended, fixedStart)
+            val scrolled = swipeDrawer()
+            assertTrue("Appended candidates must remain reachable in the same continuous grid",
+                scrolled.cells.any { it.index >= original.size })
+            assertSuffix(scrolled, appended, fixedStart)
             // Appending a second offscreen tail cannot change either visible geometry or cutoff.
             val extended = appended + candidates(count = 80, offset = 3)
             fixture.update { it.copy(candidates = extended,
@@ -449,7 +459,7 @@ class ImeCandidateContinuationTest {
             val unchanged = strip()
             assertEquals("Offscreen append must preserve visible strip candidates", after.intersecting, unchanged.intersecting)
             assertEquals("Offscreen append must not advance cutoff", after.continuationStart, unchanged.continuationStart)
-            assertEquals("Offscreen append must preserve drawer IDs and positions", result, drawer())
+            assertEquals("Offscreen append must preserve drawer IDs and positions", scrolled, drawer())
         }
     }
 }

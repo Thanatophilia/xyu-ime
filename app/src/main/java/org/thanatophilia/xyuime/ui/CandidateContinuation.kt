@@ -24,6 +24,19 @@ internal fun candidateContinuationStart(
     return lastComplete?.plus(1) ?: intersecting.minOfOrNull { it.index }
 }
 
+/** Capture the continuation only from the strip's initial leftmost layout. */
+internal fun initialCandidateContinuationStart(
+    items: List<StripCandidateBounds>,
+    viewportStart: Int,
+    viewportEnd: Int,
+    totalItems: Int,
+    firstVisibleItem: Int,
+    firstVisibleScrollOffset: Int,
+): Int? {
+    if (firstVisibleItem != 0 || firstVisibleScrollOffset != 0) return null
+    return candidateContinuationStart(items, viewportStart, viewportEnd, totalItems)
+}
+
 /** Never deduplicate by text: equally-spelled words can have distinct readings/native IDs. */
 internal fun continuationCandidates(candidates: List<DrawerCandidate>, start: Int): List<DrawerCandidate> =
     if (start <= 0) candidates else candidates.filter { it.index >= start }

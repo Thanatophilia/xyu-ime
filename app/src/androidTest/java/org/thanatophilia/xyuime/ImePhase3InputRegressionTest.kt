@@ -228,8 +228,8 @@ class ImePhase3InputRegressionTest {
         floatingScreenshot("phase3-strip-drag-closed-real-ime")
         tap("candidate_toggle")
         val reopened = settledCandidates()
-        assertEquals("Reopening must continue after the new strip boundary",
-            stripAfter.continuationStart, reopened.first().index)
+        assertEquals("Reopening must continue after the original leftmost-screen boundary",
+            stripBefore.continuationStart, reopened.first().index)
         val grid = node("candidate_grid").visibleBounds
         device.swipe(grid.centerX(), grid.top + grid.height() * 3 / 4,
             grid.centerX(), grid.top + grid.height() / 3, 50)

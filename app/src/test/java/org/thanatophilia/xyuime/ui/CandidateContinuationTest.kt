@@ -11,6 +11,18 @@ class CandidateContinuationTest {
         assertEquals(2, candidateContinuationStart(cells, 0, 149, 20))
     }
 
+    @Test fun initialBoundaryIsCapturedOnlyAtTheLeftmostStripPosition() {
+        val initial = listOf(StripCandidateBounds(0, 0, 60), StripCandidateBounds(1, 60, 60),
+            StripCandidateBounds(2, 120, 60))
+        val start = initialCandidateContinuationStart(initial, 0, 110, 20, 0, 0)
+        assertEquals(1, start)
+        val scrolled = listOf(StripCandidateBounds(4, 0, 60), StripCandidateBounds(5, 60, 60))
+        assertNull(initialCandidateContinuationStart(scrolled, 0, 110, 20, 4, 0))
+        assertNull(initialCandidateContinuationStart(initial, 0, 110, 20, 0, 12))
+        // The latched value remains the initial value when the live strip advances.
+        assertEquals(1, start)
+    }
+
     @Test fun partialTrailingWordIsKeptAndPrefetchedOffscreenCellsDoNotCount() {
         val cells = listOf(StripCandidateBounds(8, -30, 60), StripCandidateBounds(9, 30, 50),
             StripCandidateBounds(10, 80, 50), StripCandidateBounds(11, 130, 60))
