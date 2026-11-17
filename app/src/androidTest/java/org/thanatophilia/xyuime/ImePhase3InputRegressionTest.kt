@@ -34,9 +34,6 @@ import java.io.File
 import kotlin.math.abs
 import kotlin.math.ceil
 
-/** Local page size of the expanded drawer. Paging never leaves the app's own filtering. */
-private const val CANDIDATE_PAGE_SIZE = 9
-
 /** Real IME tests. The editor/action recorder exists only in the instrumentation APK. */
 @RunWith(AndroidJUnit4::class)
 class ImePhase3InputRegressionTest {
@@ -223,13 +220,28 @@ class ImePhase3InputRegressionTest {
         val candidateSelector = By.res(java.util.regex.Pattern.compile("candidate:[0-9]+"))
         val cells = node("candidate_grid").findObjects(candidateSelector)
         assertTrue("Drawer must contain visible candidate cells", cells.isNotEmpty())
-        // Start inside a low candidate cell and drag; releasing must not become a click.
-        // Candidates move only through the page buttons, so a drag need not change them:
-        // what must hold is that the drawer stays expanded and nothing is selected.
+        val initial = candidateViewport()
+        // A real drag from a candidate must scroll the continuous grid, never select it.
         val start = cells.map { it.visibleBounds }.filter { it.height() > 10 }
             .maxByOrNull { it.centerY() } ?: error("No usable candidate gesture target")
-        device.swipe(start.centerX(), start.centerY(), start.centerX(), grid.top + 4, 30)
+        device.swipe(start.centerX(), start.centerY(), start.centerX(), grid.top + grid.height() / 3, 30)
         device.waitForIdle()
+        val afterFinger = settledViewport()
+        assertNotEquals("Manual finger scrolling must move the actual candidates", initial, afterFinger)
+        assertTrue("A continuous viewport is not a fixed nine-item page", initial.cells.size > 9)
+        floatingScreenshot("phase3-candidate-manual-scroll")
+        tap("candidate_tools_page_down")
+        val afterArrow = settledViewport()
+        assertTrue("Down arrow must continue below the hand-scrolled position",
+            afterArrow.cells.first().index > afterFinger.cells.first().index)
+        tap("candidate_tools_page_up")
+        val afterUp = settledViewport()
+        assertTrue("Up arrow must move upwards from the current position",
+            afterUp.cells.first().index < afterArrow.cells.first().index)
+        // The view stays manually scrollable after using both icon buttons.
+        device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + grid.height() / 2, 35)
+        device.waitForIdle()
+        assertNotEquals("Icons must not replace manual scrolling with fixed pages", afterUp, settledViewport())
         freshTree()
         assertNotNull("Dragging must leave the drawer expanded",
             device.findObject(By.res("candidate_drawer").pkg(pkg)))
@@ -327,58 +339,65 @@ class ImePhase3InputRegressionTest {
         return settledCandidates()
     }
 
-    /** Paging is local UI state: at the first page, page-up cannot change anything. */
-    private fun firstLocalPage(): List<DisplayedCandidate> {
-        var current = settledCandidates()
-        repeat(512) {
+    private data class CandidateViewport(val cells: List<DisplayedCandidate>, val firstBounds: Rect)
+
+    private fun candidateViewport(): CandidateViewport {
+        val cells = visibleCandidates()
+        val first = requireNotNull(cells.firstOrNull()) { "No visible candidate" }
+        val bounds = requireNotNull(node("candidate_grid").findObject(By.res("candidate:${first.index}"))).visibleBounds
+        return CandidateViewport(cells, Rect(bounds))
+    }
+
+    private fun settledViewport(): CandidateViewport {
+        settledCandidates()
+        val deadline = SystemClock.uptimeMillis() + 8_000
+        var previous = candidateViewport()
+        var stableSince = SystemClock.uptimeMillis()
+        do {
+            val current = candidateViewport()
+            val now = SystemClock.uptimeMillis()
+            if (current != previous) stableSince = now
+            if (now - stableSince >= 300) return current
+            previous = current
+            SystemClock.sleep(50)
+        } while (SystemClock.uptimeMillis() < deadline)
+        error("Candidate viewport did not settle: $previous")
+    }
+
+    /** Buttons scroll a continuous list: the top is determined by real scroll position. */
+    private fun firstCandidateViewport(): List<DisplayedCandidate> {
+        repeat(80) {
+            val previous = settledViewport()
             tap("candidate_tools_page_up")
-            val previous = current
-            current = settledCandidates()
-            if (current == previous) return current
+            val current = settledViewport()
+            if (current == previous) return current.cells
         }
-        error("Page-up must reach the first local page")
+        error("Up arrow must reach the beginning of the continuous candidates")
     }
 
-    /** Walk the real 下翻页 button; stop at the last local page or after the page bound. */
-    private fun collectLocalPages(maxPages: Int = 24): List<List<DisplayedCandidate>> {
-        val pages = mutableListOf<List<DisplayedCandidate>>()
-        var current = firstLocalPage()
-        repeat(maxPages) {
-            pages.add(current)
-            if (it == maxPages - 1) return pages
+    /** Adjacent screenfuls intentionally overlap. Every index still maps to one real text. */
+    private fun assertAllContains(expected: List<DisplayedCandidate>) {
+        val wanted = expected.associateBy { it.index }.toMutableMap()
+        val seen = mutableMapOf<Int, DisplayedCandidate>()
+        firstCandidateViewport()
+        repeat(80) {
+            val current = settledViewport()
+            current.cells.forEach { cell ->
+                seen[cell.index]?.let { assertEquals("Candidate identity must stay stable while scrolling", it, cell) }
+                seen[cell.index] = cell
+                wanted.remove(cell.index)?.let { assertEquals("Filtered candidate must keep native text and index", it, cell) }
+            }
+            if (wanted.isEmpty()) return
             tap("candidate_tools_page_down")
-            var next = settledCandidates()
+            var next = settledViewport()
             if (next == current) {
-                // The last local page may have just asked the engine for more candidates.
-                SystemClock.sleep(400)
-                next = settledCandidates()
-                if (next == current) return pages
+                SystemClock.sleep(300)
+                tap("candidate_tools_page_down")
+                next = settledViewport()
+                if (next == current) error("Filtered candidates absent from All: $wanted")
             }
-            current = next
         }
-        return pages
-    }
-
-    /** Pages must show disjoint slices of the loaded prefix, never a renumbered list. */
-    private fun assertDistinctPages(pages: List<List<DisplayedCandidate>>) {
-        assertTrue("Every local page must show 1..9 candidates",
-            pages.isNotEmpty() && pages.all { it.size in 1..CANDIDATE_PAGE_SIZE })
-        val indices = pages.flatten().map { it.index }
-        assertEquals("Local pages must not repeat a global candidate index", indices.size, indices.toSet().size)
-    }
-
-    /** Every filtered item keeps its own global index and text inside All's local pages. */
-    private fun assertAllContains(pages: List<List<DisplayedCandidate>>, expected: List<DisplayedCandidate>) {
-        val wanted = expected.associateBy { it.index }
-        assertEquals("A filtered viewport must not reuse global indices", expected.size, wanted.size)
-        assertDistinctPages(pages)
-        val all = pages.flatten()
-        wanted.forEach { (index, item) ->
-            val actual = requireNotNull(all.firstOrNull { it.index == index }) {
-                "Filtered candidate:$index is missing from All; saw=${all.map { it.index }}"
-            }
-            assertEquals("Filtered candidate:$index changed its global text", item.text, actual.text)
-        }
+        error("Continuous candidate walk exceeded bound; missing=$wanted")
     }
 
     @Test fun expandedPinyinFilterKeepsGlobalIndicesAndCommitsDisplayedCandidate() = withChineseEditor {
@@ -405,13 +424,11 @@ class ImePhase3InputRegressionTest {
         assertExpandedPinyinLayout()
         floatingScreenshot("phase3-expanded-pinyin-filtered")
 
-        // Compare every visible filtered item with the locally paged unfiltered list. A UI
-        // that renumbers its filtered items cannot pass even if its click handler is correct.
+        // Walk the same continuous list with icon buttons. Repeated edge rows are valid;
+        // the original native index/text pairing must remain identical across every view.
         selectSyllable("syllable:all")
-        val allPages = collectLocalPages(maxPages =
-            ((firstGroup + filtered).maxOf { it.index } / CANDIDATE_PAGE_SIZE + 1).coerceAtMost(512))
-        assertAllContains(allPages, firstGroup + filtered)
-        assertEquals("All must restore the original candidate prefix", allBefore, firstLocalPage())
+        assertAllContains(firstGroup + filtered)
+        assertEquals("All must restore the original candidate prefix", allBefore, firstCandidateViewport())
         val selected = selectSyllable(otherTag)
         val target = filtered.firstOrNull { it.index > 0 && it in selected }
             ?: error("A noninitial pinyin group must expose a nonzero original candidate index: $filtered")
@@ -465,7 +482,7 @@ class ImePhase3InputRegressionTest {
         assertUnchangedLayout()
         floatingScreenshot("phase3-expanded-pinyin-layout-filtered")
         selectSyllable("syllable:all")
-        assertEquals("All must restore the original candidate prefix", allBefore, firstLocalPage())
+        assertEquals("All must restore the original candidate prefix", allBefore, firstCandidateViewport())
         assertUnchangedLayout()
         floatingScreenshot("phase3-expanded-pinyin-all-restored")
         tap("candidate_toggle")
@@ -766,20 +783,25 @@ class ImePhase3InputRegressionTest {
             it.text.startsWith("nihao") && it.composing?.replace(" ", "") == "niha"
         }
         node("candidate_drawer")
-        // Right rail: delete, page up, page down, enter (commit only, never sends).
-        val tools = node("candidate_tools")
-        assertTrue("Right rail must expose delete", tools.hasObject(By.res("candidate_delete")))
-        assertTrue("Right rail must expose page up", tools.hasObject(By.res("candidate_tools_page_up")))
-        assertTrue("Right rail must expose page down", tools.hasObject(By.res("candidate_tools_page_down")))
-        assertTrue("Right rail must expose commit", tools.hasObject(By.res("candidate_enter")))
+        // All four right-rail controls render icons. Spoken descriptions remain available.
+        val tags = listOf("candidate_delete", "candidate_tools_page_up", "candidate_tools_page_down", "candidate_enter")
+        val controls = tags.map { node(it) }
+        controls.forEach { control ->
+            assertTrue("Action button must show an icon, not a word label: ${control.resourceName}", control.text.isNullOrBlank())
+            assertFalse("Icon buttons must retain accessibility descriptions", control.contentDescription.isNullOrBlank())
+        }
+        assertEquals("Up arrow must describe the scroll operation", "上一屏候选", controls[1].contentDescription)
+        assertEquals("Down arrow must describe the scroll operation", "下一屏候选", controls[2].contentDescription)
+        assertTrue("Right rail order must be delete/up/down/enter", controls.zipWithNext().all { (a, b) ->
+            a.visibleBounds.bottom <= b.visibleBounds.top
+        })
+        assertFalse("The rail must not show the word 上翻页", node("candidate_tools").hasObject(By.text("上翻页")))
+        assertFalse("The rail must not show the word 下翻页", node("candidate_tools").hasObject(By.text("下翻页")))
         assertEquals("niha", snapshot().composing?.replace(" ", ""))
-        // Paging edits only what this view shows: never the code, never the editor.
-        val firstPage = settledCandidates()
+        val editorBeforeScrolling = snapshot()
         tap("candidate_tools_page_down")
-        assertEquals("Page-down must not change the composition", "niha",
-            snapshot().composing?.replace(" ", ""))
         tap("candidate_tools_page_up")
-        assertEquals("Page-up must restore the first local page", firstPage, settledCandidates())
+        assertEquals("Both arrows must preserve the entire editor state", editorBeforeScrolling, snapshot())
         assertEquals("niha", snapshot().composing?.replace(" ", ""))
         // Commit sends the real highlighted candidate; never predict the dictionary entry.
         tap("candidate_enter")
@@ -812,37 +834,35 @@ class ImePhase3InputRegressionTest {
         assertTrue("All-mode abbreviations include phrases", all.any {
             it.text.codePointCount(0, it.text.length) > 1
         })
+        val drawer = node("candidate_drawer").visibleBounds
+        val type = node("candidate_type").visibleBounds
+        val tools = node("candidate_tools").visibleBounds
+        assertTrue("Type cycle must stay pinned in the low left",
+            type.left < tools.left && type.bottom >= drawer.bottom - 12)
         tap("candidate_type")
-        val singlePages = collectLocalPages(maxPages = 2)
-        assertTrue("Single mode only offers one Unicode code point", singlePages.all { page ->
-            page.all { it.text.codePointCount(0, it.text.length) == 1 }
+        val single = settledCandidates()
+        assertTrue("Single mode only offers one Unicode code point", single.all {
+            it.text.codePointCount(0, it.text.length) == 1
         })
         assertEquals("Filtering must not commit text", before, snapshot())
         floatingScreenshot("phase3-candidate-tools-single")
+        tap("candidate_tools_page_down")
+        val singleAfterArrow = settledCandidates()
+        assertTrue("Arrow scrolling must keep the single-character filter", singleAfterArrow.all {
+            it.text.codePointCount(0, it.text.length) == 1
+        })
         tap("candidate_type")
-        assertEquals("The low-left cycle returns to All and never shows phrases-only", all, firstLocalPage())
-        // Subset identity is checked against every All page this view can page through.
-        val allPages = collectLocalPages(maxPages =
-            (singlePages.flatten().maxOf { it.index } / CANDIDATE_PAGE_SIZE + 1).coerceAtMost(512))
-        assertAllContains(allPages, singlePages.flatten())
-        assertEquals("All must restore its first local page", all, firstLocalPage())
-        assertEquals("Paging keeps the composition", before, snapshot())
-        // A filter chosen while All sits on a later page must still agree with the walked pages.
-        val seen = allPages.flatten().associateBy { it.index }
+        assertEquals("The low-left cycle returns directly to All, without a phrases-only step", all, settledCandidates())
+        assertAllContains((single + singleAfterArrow).distinctBy { it.index })
+        assertEquals("All can scroll back to its first viewport", all, firstCandidateViewport())
+        assertEquals("Scrolling keeps the composition", before, snapshot())
+        // Switching filters at an arbitrary scrolled position must return to that filter's top.
+        tap("candidate_tools_page_down")
         tap("candidate_type")
-        val singleAfterPaging = settledCandidates()
-        assertTrue("Single mode must still show one-codepoint items after All paging",
-            singleAfterPaging.isNotEmpty() && singleAfterPaging.all {
-                it.text.codePointCount(0, it.text.length) == 1
-            })
-        singleAfterPaging.forEach { item ->
-            val actual = seen[item.index]
-            assertNotNull("Single candidate:${item.index} must exist in the walked All pages", actual)
-            assertEquals("Single candidate:${item.index} changed its All text", item.text, actual?.text)
-        }
+        assertEquals("Single filter resets to its own first viewport", single, settledCandidates())
         tap("candidate_type")
-        assertEquals("All is restored after the paged filter round trip", all, firstLocalPage())
-        node("candidate_toggle")
+        assertEquals("All restores its first viewport after the filter round trip", all, settledCandidates())
+        assertEquals("Pinned type button must not move with the grid", type, node("candidate_type").visibleBounds)
     }
 
     @Test fun candidateStripDoesNotResizeLetterKeys() = withChineseEditor {

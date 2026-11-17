@@ -25,14 +25,19 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.abs
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -187,10 +192,6 @@ enum class CursorDirection { Left, Right, Up, Down, Home, End }
 
 private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
 
-/** How many filtered candidates one local page shows. Paging is a display concern only:
- * the view owns this page index and never asks Rime to move its own menu page.
- */
-private const val CANDIDATE_PAGE_SIZE = 9
 
 private val XyuLightColors = lightColorScheme(
     primary = Color(0xFF536C66),
@@ -346,6 +347,7 @@ private fun KeyboardSurface(
                         selectedSyllable = it
                         syllableSelectionRequest++
                     }, wordFilter = wordFilter, onWordFilter = { wordFilter = it },
+                    scrollResetKey = syllableSelectionRequest,
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
@@ -461,7 +463,7 @@ private fun CandidateChevron(expanded: Boolean, color: Color, modifier: Modifier
 private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit,
     scroll: LazyGridState, syllableScroll: LazyListState, selectedSyllable: String?,
     onSelectSyllable: (String?) -> Unit, wordFilter: CandidateWordFilter,
-    onWordFilter: (CandidateWordFilter) -> Unit, modifier: Modifier) {
+    onWordFilter: (CandidateWordFilter) -> Unit, scrollResetKey: Long, modifier: Modifier) {
     val current by rememberUpdatedState(state)
     val action by rememberUpdatedState(onAction)
     val fontScale = LocalDensity.current.fontScale
@@ -481,22 +483,55 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 }
             }
     }
-    // Paging belongs to the display: this view owns the local page index over its own
-    // filtered list, resets it on every revision/filter change, and never pages Rime.
-    var page by remember(state.candidateRevision, selectedSyllable, wordFilter) { mutableStateOf(0) }
-    val pageCount = if (visible.isEmpty()) 1
-        else (visible.size + CANDIDATE_PAGE_SIZE - 1) / CANDIDATE_PAGE_SIZE
-    val currentPage = page.coerceIn(0, pageCount - 1)
-    val paged = visible.drop(currentPage * CANDIDATE_PAGE_SIZE).take(CANDIDATE_PAGE_SIZE)
-    // Showing the last local page asks the engine for more candidates; it never pages it.
-    // An empty filtered page is not proof there are no matches in later native candidates.
-    LaunchedEffect(currentPage, pageCount, state.candidates.size, state.hasMoreCandidates,
-        state.loadingCandidates, state.candidateRevision, selectedSyllable, wordFilter) {
-        if (currentPage >= pageCount - 1 && current.hasMoreCandidates && !current.loadingCandidates)
-            action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+    // The entire filtered prefix stays in one continuous grid. Both finger gestures and
+    // the arrow controls act on this same LazyGridState; there is no fixed page index.
+    var screenStep by remember(state.candidateRevision, selectedSyllable, wordFilter, scrollResetKey) { mutableStateOf(0L) }
+    val currentVisible by rememberUpdatedState(visible)
+    // A new finger drag cancels an in-flight icon animation or deferred end-of-list step.
+    LaunchedEffect(scroll) {
+        scroll.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) screenStep = 0L
+        }
     }
-    // A new local page always starts at its first cell; never inherit the previous offset.
-    LaunchedEffect(currentPage, visible.size, scroll) { scroll.scrollToItem(0) }
+    LaunchedEffect(scroll, visible.size, state.candidates.size, state.loadingCandidates,
+        state.hasMoreCandidates, selectedSyllable, wordFilter) {
+        snapshotFlow { scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .distinctUntilChanged().collect { last ->
+                if ((currentVisible.isEmpty() || last >= currentVisible.size - 8) &&
+                    current.hasMoreCandidates && !current.loadingCandidates) {
+                    action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+                }
+            }
+    }
+    suspend fun scrollOneScreen(forward: Boolean) {
+        val layout = scroll.layoutInfo
+        val height = (layout.viewportEndOffset - layout.viewportStartOffset).coerceAtLeast(1)
+        // A small overlap keeps a reference row visible even for different word widths.
+        scroll.animateScrollBy(height * if (forward) 0.85f else -0.85f, tween(180))
+    }
+    LaunchedEffect(screenStep, state.candidateRevision, selectedSyllable, wordFilter, scrollResetKey) {
+        if (screenStep != 0L) {
+            val forward = screenStep > 0
+            if (forward && !scroll.canScrollForward) {
+                // Reach the loaded end without losing the down-arrow press. Sparse filters
+                // may need several native prefixes before they obtain another visible row.
+                withTimeoutOrNull(8_000L) {
+                    while (!scroll.canScrollForward && (current.hasMoreCandidates || current.loadingCandidates)) {
+                        val previousSize = current.candidates.size
+                        val wasLoading = current.loadingCandidates
+                        if (current.hasMoreCandidates && !current.loadingCandidates)
+                            action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
+                        snapshotFlow {
+                            scroll.canScrollForward || current.candidates.size != previousSize ||
+                                current.loadingCandidates != wasLoading || !current.hasMoreCandidates
+                        }.first { it }
+                        androidx.compose.runtime.withFrameNanos { }
+                    }
+                }
+            }
+            if (!forward || scroll.canScrollForward) scrollOneScreen(forward)
+        }
+    }
     Row(modifier.semantics { testTagsAsResourceId = true; testTag = "candidate_drawer" }) {
         Column(Modifier.width(64.dp).fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface)
@@ -535,7 +570,7 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                     testTagsAsResourceId = true
                     testTag = "candidate_grid"
                 }) {
-                itemsIndexed(paged, key = { _, candidate -> candidate.index },
+                itemsIndexed(visible, key = { _, candidate -> candidate.index },
                     span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
                     CandidateCell(candidate.text, candidate.index, state, onAction,
                         Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
@@ -563,19 +598,17 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
                 Modifier.fillMaxWidth().weight(1f), small = true, repeat = true,
                 customTag = "candidate_delete", icon = "delete",
                 onClick = { onAction(KeyboardAction.CandidateBackspace(state.candidateSession)) })
-            KeyFace("上翻页", "上一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
-                small = true, customTag = "candidate_tools_page_up",
-                onClick = { if (currentPage > 0) page = currentPage - 1 })
-            KeyFace("下翻页", "下一页候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
-                small = true, customTag = "candidate_tools_page_down",
-                onClick = {
-                    if (currentPage < pageCount - 1) page = currentPage + 1
-                    else if (current.hasMoreCandidates && !current.loadingCandidates)
-                        action(KeyboardAction.LoadMoreCandidates(current.candidateRevision))
-                })
-            KeyFace("回车", "回车：${state.actionLabel}（仅提交候选，不发送）", fontScale, shape,
+            KeyFace("", "上一屏候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
+                small = true, customTag = "candidate_tools_page_up", icon = "page_up",
+                enabled = scroll.canScrollBackward,
+                onClick = { screenStep = -(abs(screenStep) + 1L) })
+            KeyFace("", "下一屏候选", fontScale, shape, Modifier.fillMaxWidth().weight(1f),
+                small = true, customTag = "candidate_tools_page_down", icon = "page_down",
+                enabled = scroll.canScrollForward || state.hasMoreCandidates || state.loadingCandidates,
+                onClick = { screenStep = abs(screenStep) + 1L })
+            KeyFace("", "提交当前候选，不发送", fontScale, shape,
                 Modifier.fillMaxWidth().weight(1f), small = true, active = true, customTag = "candidate_enter",
-                onClick = { onAction(KeyboardAction.CandidateCommit(state.candidateSession)) })
+                icon = "enter", onClick = { onAction(KeyboardAction.CandidateCommit(state.candidateSession)) })
         }
     }
 }
@@ -923,6 +956,28 @@ private fun KeyIcon(type: String, color: Color, locked: Boolean, modifier: Modif
                 drawPath(path, color, style = stroke)
                 drawLine(color, p(12f, 9f), p(17f, 15f), strokeWidth = stroke.width, cap = StrokeCap.Round)
                 drawLine(color, p(17f, 9f), p(12f, 15f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            "page_up", "page_down" -> {
+                // Broad chevrons, consistent with the expand/collapse icon.
+                val end = if (type == "page_up") 15f else 9f
+                val tip = if (type == "page_up") 10f else 14f
+                val path = Path().apply {
+                    moveTo(4f * unit, end * unit)
+                    lineTo(12f * unit, tip * unit)
+                    lineTo(20f * unit, end * unit)
+                }
+                drawPath(path, color, style = stroke)
+            }
+            "enter" -> {
+                val path = Path().apply {
+                    moveTo(20f * unit, 5f * unit)
+                    lineTo(20f * unit, 13f * unit)
+                    lineTo(5f * unit, 13f * unit)
+                    moveTo(10f * unit, 8f * unit)
+                    lineTo(5f * unit, 13f * unit)
+                    lineTo(10f * unit, 18f * unit)
+                }
+                drawPath(path, color, style = stroke)
             }
             "shift" -> {
                 val path = Path().apply {
