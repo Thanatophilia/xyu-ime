@@ -1,6 +1,6 @@
 # 絮雨输入法 · Xyu IME
 
-以 Jetpack Compose 绘制键盘、自行实现 Android 系统输入法前端。阶段三已接入离线 Rime/librime 简体全拼。0.3.51 独立悬浮编码的核心显示效果已获用户实机认可并归档；0.3.54 在该基础上优化宽口箭头、左侧音节筛选和候选排列，云端验证通过，待用户安装审查。阶段三完整实机验收待完成。阶段二主体已验收，句首大写修正版仍待用户复测。后续再推进布局优化与键盘自定义。
+以 Jetpack Compose 绘制键盘，自行实现 Android 系统输入法前端。阶段三已接入离线 Rime/librime 简体全拼。0.3.51 独立悬浮编码核心显示效果已获用户实机认可并归档；最新候选版 **0.3.60** 完成候选页本地分页与回归修复，云端验证通过，待用户实机审查。阶段三完整实机验收待完成。阶段二主体已验收，句首大写修正版仍待用户复测。
 
 ## 第一阶段 · 已完成
 
@@ -39,17 +39,18 @@
 - 原符号页布局与底部七键顺序保留。本阶段尚未接入 Rime 与中文。
 - [阶段二手机验收清单](docs/acceptance-phase2.md)。
 
-## 第三阶段 · 悬浮编码显示基线已归档，完整实机验收待完成
+## 第三阶段 · 本地候选分页已验证，实机验收待完成
 
-- 候选交付版本：**0.3.55**（versionCode 55），代码提交 [`a91c40c`](https://github.com/Thanatophilia/xyu-ime/commit/a91c40c2ac2f055fcaf04e229d85111cf7d79a04)，Actions [#55](https://github.com/Thanatophilia/xyu-ime/actions/runs/43973067954) 全部门禁成功。展开页保持左侧拼音首音节筛选和按词长分配的候选区，右侧新增操作栏：“全部／单字／词语”类型切换、删除（长按连删）、清空当前编码、返回键盘。删除与清空只作用于未提交拼音，不会波及已上屏正文。
-- APK：[xyu-ime-0.3.55.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43973067954)；SHA256：`739264980bb580462be236bf55af182c9d52832a05c9c8b3c3f835832ea44215`，下载后与同包校验和复核一致。
-- 最新实际测试报告：app JVM **25 passed**；Rime JVM **1 passed**（部署事务故障注入测试入口）；app Android 36 **23 passed**；Rime Android 36 **6 passed**；合计 **55 passed / 0 skipped / 0 failures**，JUnit XML 中 **0 errors**。Rime JVM 计数来自 Gradle HTML 报告（artifact 未收录其 XML）。Android Lint **0 errors / 15 warnings / 5 hints**。新增测试覆盖删除边界、长按停手、清空保留正文、返回保留编码，以及“单字／词语”按 Unicode 码点筛选；既有悬浮编码、音节筛选、窗口稳定性和编辑回归继续通过。
-- 交付门禁证据：`apksigner verify --verbose --print-certs` 输出 **Verifies**、v2 **true**；固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。`zipalign -c -P 16 -v 4` 输出 **Verification successful**；`verify-apk.py` 在 CI 和下载后本地复验均通过，仅含 **arm64-v8a / x86_64**，4 个原生库各 3 个 ELF LOAD 段满足 16 KB 对齐，Rime 资源齐全。
-- 历史记录：0.3.45 额外 ABI 与验证失败传播问题已修正；0.3.47 修复候选栏挤压键盘；0.3.51 实现独立悬浮编码并获核心显示效果认可；0.3.52—0.3.53 的问题已在 0.3.54 修复；0.3.54 交付左侧音节栏与候选排列，本轮 0.3.55 补齐操作栏。原始 artifact 的 READ-ME.md 为构建前文档快照，请以本页及最新验收清单为准；当前 APK、BUILD.txt 与校验和对应 0.3.55。
-- 实机反馈与小阶段归档：2026-11-17，用户对 0.3.51 反馈“还好，有需要优化的，至少效果做对了”，显示基线归档提交 `1dbf405`。随后用户要求更换过尖箭头、确认左侧音节栏（0.3.54），并要求补齐候选页操作（0.3.55）；两个候选页版本均待实机审查。
-- 状态：**旧显示基线已归档；候选页优化与操作栏待实机审查；阶段三完整功能与兼容性实机验收仍待完成**。独立悬浮编码、固定候选栏、完整候选页替换底部七键的结构保留。
-- [候选页设计与参考](docs/candidate-page.md)；左栏按实际候选首音节筛选，缺失读音保留在“全部”，沿用 4096 项候选前缀上限。
-- [阶段三手机验收清单](docs/acceptance-phase3.md)。
+- 候选交付版本：**0.3.60**（versionCode 60），代码提交 [`fe19e09`](https://github.com/Thanatophilia/xyu-ime/commit/fe19e098be7029c3a81810a9e31443d2d97b27c6)，Actions [#60](https://github.com/Thanatophilia/xyu-ime/actions/runs/43983690194) 全部门禁成功。
+- 展开页左侧是首音节筛选，左下固定“全部／单字”切换，不提供“词语”模式；右栏固定“删除／上翻页／下翻页／回车”。先按音节与字类筛选，再由界面每页显示最多 9 项，切换输入修订、音节或字类重置到第一页；上、下翻页只改变界面页码，不向 Rime 发送翻页按键，也不改变编码或原生高亮。到最后一个已加载本地页继续读取候选前缀，沿用 4096 项上限。候选点击保留原始索引和候选修订校验；回车按引擎真实高亮索引提交，越界则不执行，不发送搜索／发送等编辑器动作。删除仅编辑当前组合，保留会话保护与长按停手边界。
+- 独立悬浮编码、固定顶部候选栏、候选页展开替换整个下方键盘（包括原底部七键）的结构保留；本轮只改 app 模块与回归测试，引擎、方案、资源和构建流程未修改。
+- APK：[xyu-ime-0.3.60.apk](https://github.com/Thanatophilia/xyu-ime/actions/runs/43983690194)；SHA256：`c17e0fb4e1cc28b413ff3e88fa0a4e29272085b7d7d774d384cea51464b7c4b9`。
+- 最新实际测试报告：app JVM 29、Rime JVM 部署事务测试入口 1、app Android 36 23、Rime Android 36 6，合计 59 passed、0 skipped、0 failures；已收录的 JUnit XML 均为 0 errors。Rime JVM 计数来自 Gradle HTML 报告。Lint 0 errors、15 warnings、6 hints。测试按真实页面收集候选的索引与文字，验证音节及单字筛选包含于“全部”；拖动只要求候选页保持展开、不选词、不提交、不露普通键；候选回车不预测词典文字，验证组合结束、已提交前缀保留且编辑器动作为空。
+- 签名 v2、ZIP 16 KB 对齐、双 ABI 与各原生库 ELF LOAD 16 KB 对齐均通过；下载后校验和及原生 verifier 复验通过。固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。
+- 历史：0.3.51 悬浮编码核心显示效果获认可；0.3.54 建立左侧音节栏，0.3.55 交付上一版操作栏；#56—#59 未通过完整门禁，不作为本轮安装版本。#60 修复按原生高亮推算页码导致的筛选／分页不一致。
+- 状态：**新候选页布局、本地翻页及阶段三完整功能与兼容性均待实机审查**。仅既有 0.3.51 的核心显示方向已获得用户认可，不扩大该反馈的验收范围。
+- 原始 artifact 的 READ-ME.md 是构建前文档快照，APK、BUILD.txt、校验和对应 0.3.60；请以本页及最新[手机验收清单](docs/acceptance-phase3.md)为准。
+- [候选页设计与参考](docs/candidate-page.md)。
 
 ## APK 云端构建
 
