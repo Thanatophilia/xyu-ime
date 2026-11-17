@@ -80,6 +80,10 @@ internal fun readCandidateStrip(
                 }
                 if (strip != null) {
                     fun collect(node: SemanticsNode) {
+                        // Lazy layouts retain prefetched/reusable nodes with old coordinates.
+                        // Only attached and actually placed nodes belong to the current frame.
+                        val layout = node.layoutInfo
+                        if (!layout.isAttached || !layout.isPlaced || layout.isDeactivated) return
                         val tag = node.config.getOrNull(SemanticsProperties.TestTag).orEmpty()
                         val index = tag.takeIf { it.startsWith("candidate:") }
                             ?.substringAfter(':')?.toIntOrNull()

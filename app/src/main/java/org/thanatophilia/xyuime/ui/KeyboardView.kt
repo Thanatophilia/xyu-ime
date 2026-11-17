@@ -319,7 +319,10 @@ private fun KeyboardSurface(
         }
     }
     val drawerStart = continuationStart ?: 0
-    val drawerScroll = remember(state.candidateRevision) { LazyGridState() }
+    // A different strip suffix is a new drawer origin, not a keyed-item anchor to retain.
+    // This state lives outside the expanded branch, so reopening an unchanged suffix
+    // preserves its vertical position while a moved strip starts at its exact successor.
+    val drawerScroll = remember(state.candidateRevision, drawerStart) { LazyGridState() }
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
     var wordFilter by remember(state.candidateRevision) { mutableStateOf(CandidateWordFilter.All) }
