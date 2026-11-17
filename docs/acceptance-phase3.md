@@ -1,6 +1,6 @@
 # 阶段三候选版手机验收
 
-状态：**0.3.72 固定首屏接续已通过云端验证，待实机审查；0.3.51 核心显示反馈不扩大为阶段三完整验收。** 本轮版本 **0.3.72（72）**，代码提交 `b3b0e0521897d59543b4047d26f39e3985202561`，[Actions #72](https://github.com/Thanatophilia/xyu-ime/actions/runs/44124429400) 全部成功。
+状态：**0.3.72 已通过云端验证；2026-11-18 用户明确确认“上一轮改动验证没问题”指 0.3.72，本轮固定首屏接续及候选交互实机验证通过，作为当前开发基线。** 后续日常输入和稳定性安排见[开发路线](roadmap.md)。 本轮版本 **0.3.72（72）**，代码提交 `b3b0e0521897d59543b4047d26f39e3985202561`，[Actions #72](https://github.com/Thanatophilia/xyu-ime/actions/runs/44124429400) 全部成功。
 
 APK SHA256：`bcbad018a1aff614725e5c6e018347585e2716fc20459ed7ccab9d4fdc701ca2`。app JVM 38、Rime JVM 部署事务测试入口 1、app Android 36 35、Rime Android 36 6，合计 80 passed、0 skipped、0 failures；已收录的 JUnit XML 均为 0 errors。Rime JVM 计数来自 Gradle HTML 报告。Lint 0 errors、15 warnings、7 hints。签名 v2、ZIP 16 KB 对齐、双 ABI 与各原生库 ELF LOAD 16 KB 对齐均通过；下载后校验和及原生 verifier 复验通过。固定签名证书 SHA256 为 `fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0`。
 
