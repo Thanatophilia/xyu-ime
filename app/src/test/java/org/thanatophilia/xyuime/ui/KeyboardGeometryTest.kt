@@ -16,12 +16,22 @@ class KeyboardGeometryTest {
         assertEquals(0f, KeyboardGeometry.edgeKeyWidthDp(10f), 0f)
     }
 
-    @Test fun exactlyFiveSingleCharactersFitOneRowAndWordsSpanTheirLength() {
+    @Test fun singleCharactersRetainFiveSlotsAndWordsOnlyUseMeasuredWidth() {
         assertEquals(5, KeyboardGeometry.CANDIDATE_COLUMNS)
-        assertEquals(1, KeyboardGeometry.candidateSpan("字"))
-        assertEquals(1, KeyboardGeometry.candidateSpan("\uD840\uDC00"))
-        assertEquals(2, KeyboardGeometry.candidateSpan("你好"))
-        assertEquals(5, KeyboardGeometry.candidateSpan("一二三四五六七"))
-        assertEquals(1, KeyboardGeometry.candidateSpan(""))
+        assertEquals(48, KeyboardGeometry.compactCandidateWidthPx(20, 240, 12))
+        assertEquals(52, KeyboardGeometry.compactCandidateWidthPx(40, 240, 12))
+        assertEquals(72, KeyboardGeometry.compactCandidateWidthPx(60, 240, 12))
+        assertEquals(92, KeyboardGeometry.compactCandidateWidthPx(80, 240, 12))
+        assertEquals(112, KeyboardGeometry.compactCandidateWidthPx(100, 240, 12))
+        // Four two-character words fit where the old two-whole-slot rule fitted only two.
+        assertTrue(KeyboardGeometry.compactCandidateWidthPx(40, 240, 12) * 4 <= 240)
+        assertTrue(KeyboardGeometry.compactCandidateWidthPx(100, 240, 12) < 240)
+    }
+
+    @Test fun extremelyLongOrEmptyCandidatesStayInsideAvailableWidth() {
+        assertEquals(240, KeyboardGeometry.compactCandidateWidthPx(Int.MAX_VALUE, 240, 12))
+        assertEquals(48, KeyboardGeometry.compactCandidateWidthPx(0, 240, 12))
+        assertEquals(1, KeyboardGeometry.compactCandidateWidthPx(20, 0, 12))
+        assertEquals(48, KeyboardGeometry.compactCandidateWidthPx(-8, 240, -2))
     }
 }

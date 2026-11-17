@@ -15,7 +15,16 @@ internal object KeyboardGeometry {
         (rowWidthDp - KEY_GAP_DP * (BOTTOM_KEY_COUNT - 1)).coerceAtLeast(0f) *
             EDGE_KEY_WEIGHT / BOTTOM_TOTAL_WEIGHT
 
-    /** One Unicode character occupies one of the five columns; longer candidates span cells. */
-    fun candidateSpan(text: String): Int =
-        text.codePointCount(0, text.length).coerceIn(1, CANDIDATE_COLUMNS)
+    const val CANDIDATE_GUTTER_DP = 12f
+
+    /** All-mode words wrap at their measured text width plus a small, consistent gutter.
+     * A single-character slot remains the minimum, but a two-character word no longer
+     * reserves two whole slots. Widths are pixel spans, so there is no coarse grid rounding.
+     */
+    fun compactCandidateWidthPx(textWidthPx: Int, availableWidthPx: Int, gutterPx: Int): Int {
+        val available = availableWidthPx.coerceAtLeast(1)
+        val minimum = (available / CANDIDATE_COLUMNS).coerceAtLeast(1)
+        val requested = textWidthPx.coerceAtLeast(0).toLong() + gutterPx.coerceAtLeast(0)
+        return requested.coerceAtLeast(minimum.toLong()).coerceAtMost(available.toLong()).toInt()
+    }
 }

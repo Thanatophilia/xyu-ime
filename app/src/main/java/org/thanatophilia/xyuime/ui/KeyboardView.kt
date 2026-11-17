@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.semantics.selected
 import kotlin.math.ceil
 import androidx.compose.foundation.lazy.LazyListState
@@ -550,15 +552,35 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             }, tag = "candidate_type", label = typeLabel)
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)))
-        Box(Modifier.weight(1f).fillMaxHeight()) {
-            val columns = KeyboardGeometry.CANDIDATE_COLUMNS
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+            val density = LocalDensity.current
+            val singleOnly = wordFilter == CandidateWordFilter.Single
+            val availablePx = constraints.maxWidth.coerceAtLeast(1)
+            // Single mode retains exactly five equal cells. All mode uses one-pixel spans
+            // as a lazy wrapping layout: a word's footprint follows its rendered width.
+            val columns = if (singleOnly) KeyboardGeometry.CANDIDATE_COLUMNS else availablePx
+            val measurer = rememberTextMeasurer()
+            val candidateStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            val gutterPx = with(density) { KeyboardGeometry.CANDIDATE_GUTTER_DP.dp.roundToPx() }
+            val widths = remember(availablePx, gutterPx, measurer, candidateStyle) {
+                mutableMapOf<String, Int>()
+            }
+            fun candidateSpan(candidate: DrawerCandidate): Int {
+                if (singleOnly) return 1
+                return widths.getOrPut(candidate.text) {
+                    val measured = measurer.measure(candidate.text, candidateStyle,
+                        softWrap = false, maxLines = 1).size.width
+                    KeyboardGeometry.compactCandidateWidthPx(measured, availablePx, gutterPx)
+                }
+            }
             LazyVerticalGrid(columns = GridCells.Fixed(columns), state = scroll,
                 modifier = Modifier.fillMaxSize().semantics {
                     testTagsAsResourceId = true
                     testTag = "candidate_grid"
                 }) {
                 itemsIndexed(visible, key = { _, candidate -> candidate.index },
-                    span = { _, candidate -> GridItemSpan(KeyboardGeometry.candidateSpan(candidate.text)) }) { _, candidate ->
+                    span = { _, candidate -> GridItemSpan(candidateSpan(candidate)) }) { _, candidate ->
                     CandidateCell(candidate.text, candidate.index, state, onAction,
                         Modifier.fillMaxWidth().heightIn(min = 48.dp), expanded = true)
                 }
@@ -633,7 +655,8 @@ private fun CandidateCell(candidate: String, index: Int, state: KeyboardUiState,
             role = Role.Button
             // The whole tap target has a label even when its inset text is clipped by scrolling.
             text = AnnotatedString(candidate)
-        }.padding(horizontal = if (expanded) 4.dp else 12.dp, vertical = if (expanded) 10.dp else 4.dp),
+        }.padding(horizontal = if (expanded) (KeyboardGeometry.CANDIDATE_GUTTER_DP / 2).dp else 12.dp,
+            vertical = if (expanded) 10.dp else 4.dp),
         contentAlignment = Alignment.Center) {
         Text(candidate, modifier = Modifier.clearAndSetSemantics {},
             color = if (index == state.highlightedCandidate) MaterialTheme.colorScheme.primary
