@@ -190,8 +190,15 @@ class ImeCandidateContinuationTest {
 
     private fun assertStartsAt(geometry: CandidateStripSnapshot, source: List<String>): Drawer {
         val start = geometry.continuationStart
-        val result = settled("Drawer starting at raw cutoff $start", ::readDrawer,
-            { it.cells.firstOrNull()?.index == start })
+        val result = try {
+            settled("Drawer starting at raw cutoff $start", ::readDrawer,
+                { it.cells.firstOrNull()?.index == start })
+        } catch (failure: Throwable) {
+            val actual = strip()
+            android.util.Log.e("XyuContinuationTest", "expectedStrip=$geometry; actualStrip=$actual")
+            screenshot("phase3-candidate-continuation-mismatch")
+            throw failure
+        }
         assertSuffix(result, source, start)
         assertEquals("First drawer cell must immediately follow last FULLY visible strip cell",
             start, result.cells.first().index)

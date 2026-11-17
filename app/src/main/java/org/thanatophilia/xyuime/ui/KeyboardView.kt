@@ -69,6 +69,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.key
+import org.thanatophilia.xyuime.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -318,7 +320,16 @@ private fun KeyboardSurface(
                 layout.viewportStartOffset, layout.viewportEndOffset, candidateCount)
         }
     }
-    val drawerStart = continuationStart ?: 0
+    val drawerStart = continuationStart
+    if (BuildConfig.DEBUG) LaunchedEffect(stripScroll) {
+        snapshotFlow {
+            val layout = stripScroll.layoutInfo
+            val cells = layout.visibleItemsInfo.joinToString { "${it.index}:${it.offset}+${it.size}" }
+            "viewport=${layout.viewportStartOffset}..${layout.viewportEndOffset} " +
+                "first=${stripScroll.firstVisibleItemIndex}:${stripScroll.firstVisibleItemScrollOffset} " +
+                "next=$continuationStart cells=[$cells]"
+        }.distinctUntilChanged().collect { android.util.Log.d("XyuContinuation", it) }
+    }
     // A different strip suffix is a new drawer origin, not a keyed-item anchor to retain.
     // This state lives outside the expanded branch, so reopening an unchanged suffix
     // preserves its vertical position while a moved strip starts at its exact successor.
@@ -361,6 +372,7 @@ private fun KeyboardSurface(
             // accessibility targets can leak through the animated candidate surface.
             Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)) {
+                key(state.candidateRevision, drawerStart) {
                 CandidateDrawer(state, onAction, drawerScroll, syllableScroll,
                     selectedSyllable, onSelectSyllable = {
                         selectedSyllable = it
@@ -371,6 +383,7 @@ private fun KeyboardSurface(
                         translationY = -(1f - reveal) * size.height
                         alpha = reveal
                     })
+                }
             }
         } else {
         Box(
