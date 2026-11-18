@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>絮雨 D5 符号页样稿 v4（右下角浮块组 + 三行完整符号）</title>
+<title>絮雨 D5 符号页样稿 v5（删除键=一格浮层）</title>
 <style>
   :root { --bg:#f6f8f6; --key:#ffffff; --key2:#e5ebe8; --line:#d5ddd8; --ink:#1a211f; --muted:#6c7e77; --accent:#426c65; --accent2:#d6e5e0; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -30,15 +30,13 @@
   .sym .ch { font-size:19px; line-height:1.05; }
   .sym .nm { font-size:8px; color:var(--muted); margin-top:1px; transform:scale(.95); }
 
-  .delkey { position:absolute; right:0; bottom:0; width:70px; height:46px; z-index:2;
-            border-radius:8px; background: var(--key); border:1px solid var(--accent);
-            box-shadow: 0 2px 6px rgba(30,60,50,.28);
-            display:flex; align-items:center; justify-content:center; gap:4px; font-size:14px; font-weight:600; color:var(--accent); cursor:pointer; }
+  /* 一格大小的删除浮层：直接盖在网格右下角的一个符号上，不做强调样式 */
+  .delkey { position:absolute; right:0; bottom:0; width:calc((100% - 21px) / 8); height:44px; z-index:2;
+            border-radius:7px; background: var(--key); border:.5px solid var(--line);
+            display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--ink); cursor:pointer; }
   .delkey:active { background: var(--accent2); }
 
-  .dots { position:absolute; right:78px; bottom:0; z-index:2; height:46px; display:flex; align-items:center;
-          padding:0 9px; border-radius:8px; background:rgba(246,248,246,.94); border:.5px solid var(--line);
-          color:var(--muted); font-size:10.5px; pointer-events:none; }
+  .dots { margin-left:auto; margin-right:10px; color:var(--muted); font-size:10.5px; pointer-events:none; }
   .dots b { color:var(--accent); }
 
   .bottom { display:flex; gap:3px; margin-top:4px; }
@@ -57,11 +55,11 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>絮雨 D5 符号页样稿 v4 · 右下角浮块组 + 三行完整符号<span class="badge">供定稿</span></h1>
-  <p class="note">按你最新要求：删除键不做整行——只有右下角一块浮出；其余区域完整显示<b>三行</b>符号。分类键在顶部，符号区上下滑动看本组全部、左右滑动切组（左滑下一组/右滑上一组，循环）；右下角圆点与删除键组成一组浮块，不占行。底栏“！﹫#”进符号页变“ABC”。</p>
+  <h1>絮雨 D5 符号页样稿 v5 · 删除键＝一格浮层，遮住一个符号<span class="badge">供定稿</span></h1>
+  <p class="note">按你最新要求：删除键只做一格大小、浮在网格上遮住一个符号；不做整行。分类键在顶部，符号区上下滑动看本组全部、左右滑动切组（左滑下一组/右滑上一组，循环）；圆点指示放在信息条里，不遮符号。底栏“！﹫#”进符号页变“ABC”。</p>
 
   <div class="keyboard">
-    <div class="strip">絮雨 · 符号 <span class="edit">编辑</span></div>
+    <div class="strip">絮雨 · 符号 <span class="dots" id="dots"></span><span class="edit">编辑</span></div>
 
     <div class="tabs">
       <div class="tab on" id="tab-cn" onclick="show('cn')">中文标点<span class="cur" id="cur-cn"></span></div>
@@ -71,8 +69,7 @@
 
     <div class="gridbox">
       <div class="grid" id="grid"></div>
-      <div class="dots" id="dots"></div>
-      <div class="delkey" onclick="alert('样稿示意：删除（长按连删）')">⌫ 删除</div>
+      <div class="delkey" onclick="alert('样稿示意：删除（长按连删）')">⌫</div>
     </div>
 
     <div class="bottom">
@@ -82,7 +79,7 @@
       <div class="bkey bmid">🌐</div><div class="bkey b1">回车</div>
     </div>
   </div>
-  <p class="note">↑ 符号区完整三行；右下角浮块组＝圆点指示＋删除键，压在网格右下方（被压的格子滚动后即可露出，滚动内容已留底部空间）。底栏仅首键变“ABC”，其余六键与 0.3.93 一致。</p>
+  <p class="note">↑ 符号区完整三行；删除键只有一格大小，浮在网格右下角、遮住那一个符号（滚动后即可露出，内容已留底部空间）。圆点指示在信息条里。底栏仅首键变“ABC”，其余六键与 0.3.93 一致。</p>
 
   <div class="sect" id="sect"></div>
   <table id="t"></table>
