@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.semantics.selected
 import kotlin.math.ceil
@@ -932,10 +933,30 @@ private fun SymbolsPagePanel(
                 }
             }
             // Exactly one cell: floats on the grid's bottom-right and covers one symbol.
-            // Uses the same key component as the letter page's backspace (press repeats).
-            DeleteKey(onAction, fontScale, keyShape,
+            // Uses a plain clickable (single tap) with an explicit zIndex so it always wins
+            // hit-testing over the grid underneath; verified through semantics as well.
+            SymbolDeleteKey(onAction, keyShape,
                 Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight))
         }
+    }
+}
+
+@Composable
+private fun SymbolDeleteKey(onAction: (KeyboardAction) -> Unit, shape: Shape, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Box(modifier.zIndex(1f).clip(shape)
+        .background(if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White)
+        .border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
+        .clickable { onAction(KeyboardAction.Backspace) }
+        .clearAndSetSemantics {
+            testTagsAsResourceId = true
+            testTag = "key:删除"
+            contentDescription = "删除"
+            role = Role.Button
+            onClick { onAction(KeyboardAction.Backspace); true }
+        },
+        contentAlignment = Alignment.Center) {
+        KeyIcon("delete", colors.onSurface, locked = false, Modifier.size(22.dp).clearAndSetSemantics {})
     }
 }
 

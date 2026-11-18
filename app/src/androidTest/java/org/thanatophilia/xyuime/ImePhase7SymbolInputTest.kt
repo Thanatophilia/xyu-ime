@@ -287,7 +287,7 @@ class ImePhase7SymbolInputTest {
         val attempts = mutableListOf<String>()
         repeat(2) {
             freshTree()
-            val target = device.waitForFreshObject(By.res("key:删除，长按连续删除").pkg(pkg), 5_000)
+            val target = device.waitForFreshObject(By.res("key:删除").pkg(pkg), 5_000)
             requireNotNull(target) { "Missing floating delete" }
             val bounds = target.visibleBounds
             val methods = listOf<Pair<String, () -> Unit>>(
@@ -316,7 +316,7 @@ class ImePhase7SymbolInputTest {
                 attempts.add("$name:no-effect(text=${snapshot().text})")
             }
         }
-        val deleteBounds = device.findObject(By.res("key:删除，长按连续删除").pkg(pkg))?.visibleBounds
+        val deleteBounds = device.findObject(By.res("key:删除").pkg(pkg))?.visibleBounds
         val gridBounds = device.findObject(By.res("symbol_grid").pkg(pkg))?.visibleBounds
         val firstKey = device.findObject(By.res("key:返回字母键盘").pkg(pkg))?.visibleBounds
         fail("Floating delete never reached '$expected'; attempts=$attempts " +

@@ -41,7 +41,7 @@ class KeyboardSymbolPageTest {
                     cell.top >= grid.top - tolerance && cell.bottom <= grid.bottom + tolerance)
         }
         // Delete floats as exactly one cell anchored to the grid's bottom-right corner.
-        val delete = rule.onNodeWithTag("key:删除，长按连续删除").fetchSemanticsNode().boundsInRoot
+        val delete = rule.onNodeWithTag("key:删除").fetchSemanticsNode().boundsInRoot
         val firstCell = rule.onNodeWithTag("symbol:cn:0").fetchSemanticsNode().boundsInRoot
         assertEquals("delete cell matches grid cell height", firstCell.height, delete.height, 1f)
         assertEquals("delete cell matches grid cell width", firstCell.width, delete.width, 1f)
@@ -64,7 +64,7 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_tab:math").performClick()
         rule.onNodeWithTag("symbol:math:2").assertContentDescriptionEquals("乘")
         rule.onNodeWithTag("symbol:math:2").performClick()
-        rule.onNodeWithTag("key:删除，长按连续删除").performClick()
+        rule.onNodeWithTag("key:删除").performClick()
         rule.runOnIdle {
             assertEquals(listOf("、", "!", "×").map { KeyboardAction.Text(it) } + KeyboardAction.Backspace, actions)
         }
