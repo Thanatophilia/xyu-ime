@@ -43,14 +43,36 @@ class ImePhase7SymbolInputTest {
         return requireNotNull(device.waitForFreshObject(By.res(tag).pkg(pkg), 10_000)) { tag }
     }
 
-    private fun tap(tag: String) { node(tag).click(); device.waitForIdle() }
+    private fun tap(tag: String) {
+        repeat(4) { attempt ->
+            val target = node(tag)
+            try {
+                target.click()
+                device.waitForIdle()
+                return
+            } catch (_: androidx.test.uiautomator.StaleObjectException) {
+                // A successful action may re-lay the keyboard between lookup and click.
+                SystemClock.sleep(150L * (attempt + 1))
+            }
+        }
+        error("Tap target kept going stale: $tag")
+    }
     private fun typeLetters(text: String) { text.forEach { tap("key:$it") } }
 
     private fun tapDescription(description: String) {
-        freshTree()
-        val target = device.waitForFreshObject(By.desc(description).pkg(pkg), 5_000)
-        requireNotNull(target) { "Missing description: $description" }.click()
-        device.waitForIdle()
+        repeat(4) { attempt ->
+            freshTree()
+            val target = device.waitForFreshObject(By.desc(description).pkg(pkg), 5_000)
+            requireNotNull(target) { "Missing description: $description" }
+            try {
+                target.click()
+                device.waitForIdle()
+                return
+            } catch (_: androidx.test.uiautomator.StaleObjectException) {
+                SystemClock.sleep(150L * (attempt + 1))
+            }
+        }
+        error("Description target kept going stale: $description")
     }
 
     private fun restoreIme(previous: String, hardware: String) {
