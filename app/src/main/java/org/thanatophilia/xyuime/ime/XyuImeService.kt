@@ -425,6 +425,10 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     }
 
     private fun handleAction(action: KeyboardAction) {
+        if (org.thanatophilia.xyuime.BuildConfig.DEBUG) {
+            // Action-class logging only; never logs input text.
+            android.util.Log.d("XyuState", "action=" + action.javaClass.simpleName)
+        }
         if (action is KeyboardAction.CollapseCandidates) {
             // Dismiss UI immediately, even while native work is queued. This does not edit
             // text or enqueue a toggle that could reopen the drawer in a later session.

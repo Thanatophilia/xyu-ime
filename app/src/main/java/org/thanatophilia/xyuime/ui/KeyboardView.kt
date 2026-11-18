@@ -933,10 +933,38 @@ private fun SymbolsPagePanel(
                 }
             }
             // Exactly one cell: floats on the grid's bottom-right and covers one symbol.
-            // Uses a plain clickable (single tap) with an explicit zIndex so it always wins
-            // hit-testing over the grid underneath; verified through semantics as well.
+            // Two layers: the visible key (semantics for accessibility) plus a touch layer
+            // on top that owns the physical tap, mirroring how grid cells receive taps.
             SymbolDeleteKey(onAction, keyShape,
-                Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight))
+                Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight).zIndex(1f))
+            val density = LocalDensity.current
+            val cellWidthPx = with(density) { cellWidth.toPx() }
+            val keyHeightPx = with(density) { keyHeight.toPx() }
+            Box(Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight)
+                .zIndex(2f)
+                .pointerInput(group, cellWidthPx, keyHeightPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        down.consume()
+                        var cancelled = false
+                        var released = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) {
+                                released = true
+                                change.consume()
+                                break
+                            }
+                            if (change.isConsumed ||
+                                change.positionChange().getDistance() > viewConfiguration.touchSlop) {
+                                cancelled = true
+                            }
+                            change.consume()
+                        }
+                        if (released && !cancelled) onAction(KeyboardAction.Backspace)
+                    }
+                })
         }
     }
 }

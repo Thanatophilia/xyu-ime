@@ -319,8 +319,9 @@ class ImePhase7SymbolInputTest {
         val deleteBounds = device.findObject(By.res("key:删除").pkg(pkg))?.visibleBounds
         val gridBounds = device.findObject(By.res("symbol_grid").pkg(pkg))?.visibleBounds
         val firstKey = device.findObject(By.res("key:返回字母键盘").pkg(pkg))?.visibleBounds
+        val logtail = device.executeShellCommand("logcat -d -t 120 -s XyuState:D").trim()
         fail("Floating delete never reached '$expected'; attempts=$attempts " +
-            "delete=$deleteBounds grid=$gridBounds firstKey=$firstKey")
+            "delete=$deleteBounds grid=$gridBounds firstKey=$firstKey log=$logtail")
         return "failed"
     }
 }
