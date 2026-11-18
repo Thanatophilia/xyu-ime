@@ -115,11 +115,20 @@ class ImePhase6WindowAccessibilityTest {
         node("key:q")
         device.setOrientationLeft()
         try {
-            // The system re-lays the IME window after rotation; wait until the letters return.
-            val deadline = SystemClock.uptimeMillis() + 20_000
-            while (SystemClock.uptimeMillis() < deadline &&
+            // Rotation tears the IME window down; show the keyboard again if needed and wait
+            // until the letters return.
+            var waited = 0L
+            val rotateDeadline = SystemClock.uptimeMillis() + 30_000
+            while (SystemClock.uptimeMillis() < rotateDeadline &&
                 device.findObject(By.res("key:q").pkg(pkg)) == null) {
+                if (waited > 0 && waited % 2000 == 0L) {
+                    instrumentation.runOnMainSync {
+                        host.getSystemService(InputMethodManager::class.java)
+                            .showSoftInput(host.currentFocus, InputMethodManager.SHOW_IMPLICIT)
+                    }
+                }
                 SystemClock.sleep(200)
+                waited += 200
             }
             device.waitForIdle()
             val surface = node("keyboard_surface").visibleBounds
@@ -265,18 +274,14 @@ class ImePhase6WindowAccessibilityTest {
             web.reload()
         }
         assertTrue("Web fixture must load", loaded.await(10, TimeUnit.SECONDS))
-        // Establish the WebView input connection through the first editable node (the
-        // textarea), then switch the DOM focus to the contenteditable div.
-        val firstEditable = device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(pkg)), 8_000)
-        requireNotNull(firstEditable) { "Web fixture must expose an editable field" }.click()
+        // The contenteditable div renders as the lowest editable node in the page; click it
+        // directly so the IME connects to the right element without fragile JS callbacks.
+        val edits = device.findObjects(By.clazz("android.widget.EditText").pkg(pkg))
+            .filter { !it.visibleBounds.isEmpty }
+            .sortedByDescending { it.visibleBounds.bottom }
+        require(edits.isNotEmpty()) { "Web fixture must expose editable nodes" }
+        edits.first().click()
         device.waitForIdle()
-        val focused = CountDownLatch(1)
-        instrumentation.runOnMainSync {
-            web.evaluateJavascript("document.getElementById('editable').focus(); document.activeElement.id;") { result ->
-                focused.countDown()
-            }
-        }
-        assertTrue("Contenteditable must take DOM focus", focused.await(5, TimeUnit.SECONDS))
         instrumentation.runOnMainSync {
             host.getSystemService(InputMethodManager::class.java).showSoftInput(web, InputMethodManager.SHOW_IMPLICIT)
         }

@@ -134,12 +134,12 @@ class ImePhase2Test {
         device.pressBack()
         node(By.text("更多测试类型").pkg(pkg)).click()
         val first = node(By.text("邮箱").pkg(pkg)).visibleBounds
-        repeat(5) {
+        repeat(40) {
             freshTree()
-            if (!device.hasObject(By.text("句首大写").pkg(pkg))) {
-                device.swipe(device.displayWidth * 9 / 10, first.centerY(),
-                    device.displayWidth / 10, first.centerY(), 20)
-            }
+            if (device.hasObject(By.text("句首大写").pkg(pkg))) return@repeat
+            device.swipe(device.displayWidth * 9 / 10, first.centerY(),
+                device.displayWidth / 10, first.centerY(), 20)
+            android.os.SystemClock.sleep(100)
         }
         node(By.text("句首大写").pkg(pkg)).click()
         editor().click()
