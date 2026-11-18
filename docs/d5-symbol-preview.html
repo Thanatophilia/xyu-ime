@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>絮雨 D5 符号页样稿（方案 B）</title>
+<style>
+  :root { --bg:#f6f8f6; --key:#ffffff; --key2:#e5ebe8; --line:#d5ddd8; --ink:#1a211f; --muted:#6c7e77; --accent:#426c65; --accent2:#d6e5e0; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:#eef2ee; font-family: system-ui, "Noto Sans SC", sans-serif; color:var(--ink); }
+  .wrap { max-width: 430px; margin: 0 auto; padding: 12px 10px 24px; }
+  h1 { font-size: 15px; margin: 6px 2px 2px; }
+  .note { font-size: 11.5px; color: var(--muted); margin: 0 2px 10px; line-height: 1.5; }
+  .keyboard { background: var(--bg); border:1px solid var(--line); border-radius: 10px; padding: 5px; }
+  .strip { height: 40px; border-radius: 8px; background: var(--key2); display:flex; align-items:center; padding: 0 10px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .strip .edit { margin-left:auto; color: var(--accent); font-weight:600; }
+  .row { display: flex; gap: 3px; margin-top: 3px; }
+  .key { position: relative; flex: 1 1 0; height: 44px; background: var(--key); border: .5px solid var(--line); border-radius: 7px;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; user-select:none; }
+  .key:active { background: var(--accent2); }
+  .key .ch { font-size: 19px; line-height: 1.05; }
+  .key .nm { font-size: 8.5px; color: var(--muted); margin-top: 1px; transform: scale(.95); }
+  .key.fn { background: var(--key2); font-size: 12px; }
+  .key.fn .ch { font-size: 13px; font-weight:600; }
+  .key.w15 { flex: 1.5 1 0; }
+  .key.cat .ch { font-size: 11.5px; font-weight:600; }
+  .key.cat.on { background: var(--accent2); border-color: var(--accent); }
+  .key.cat.on .ch { color: var(--accent); }
+  .key.cat .state { font-size: 8.5px; color: var(--accent); font-weight:600; }
+  .bottom { display:flex; gap:3px; margin-top:3px; }
+  .bottom .key { height:38px; background: var(--key2); font-size:12px; }
+  .bottom .space { flex: 3.1 1 0; }
+  .bottom .w13 { flex: 1.3 1 0; }
+  .bottom .mid { flex: .95 1 0; }
+  .bottom .comma { flex:.7 1 0; }
+  .sect { font-size: 11.5px; color: var(--muted); margin-top: 14px; }
+  .sect b { color: var(--ink); }
+  table { border-collapse: collapse; width:100%; font-size: 11.5px; margin-top:6px; }
+  td, th { border: 1px solid var(--line); padding: 3px 5px; text-align:center; background:#fff; }
+  th { background:#f1f5f1; font-weight:600; }
+  .cp { color: var(--muted); font-size: 10px; }
+  .badge { display:inline-block; font-size:10px; border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:1px 6px; margin-left:6px; vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>絮雨 D5 符号页样稿 · 方案 B（行内分类键）<span class="badge">供定稿</span></h1>
+  <p class="note">只展示符号页：字母页、数字页、候选页、悬浮编码、底部七键均不变。每分类 2 行 × 10 键；第三行固定为 ABC + 三个分类键 + 删除。点分类键切换。</p>
+
+  <div class="keyboard">
+    <div class="strip">絮雨 · 符号 <span class="edit">编辑</span></div>
+    <div class="row" id="row1"></div>
+    <div class="row" id="row2"></div>
+    <div class="row">
+      <div class="key fn w15" onclick="alert('样稿示意：返回字母页')"><span class="ch">ABC</span></div>
+      <div class="key fn cat" id="cat-cn" onclick="show('cn')"><span class="ch">中文标点</span><span class="state" id="st-cn"></span></div>
+      <div class="key fn cat" id="cat-en" onclick="show('en')"><span class="ch">英文符号</span><span class="state" id="st-en"></span></div>
+      <div class="key fn cat" id="cat-math" onclick="show('math')"><span class="ch">数学单位</span><span class="state" id="st-math"></span></div>
+      <div class="key fn w15" onclick="alert('样稿示意：删除')"><span class="ch">⌫</span></div>
+    </div>
+    <div class="bottom">
+      <div class="key w13">！﹫#</div><div class="key mid">123</div><div class="key comma">，</div>
+      <div class="key space">空格</div><div class="key comma">。</div><div class="key mid">🌐</div><div class="key w13">回车</div>
+    </div>
+  </div>
+  <p class="note">↑ 底部七键保持 0.3.93 顺序与宽度，本批不动。</p>
+
+  <p class="sect"><b>中文标点 20</b>（候选替补：〈 〉 『 』 — ～ ·，可等量替换）</p>
+  <table id="t-cn"></table>
+  <p class="sect"><b>英文符号 20</b>（现状共 25 个，需按此表取舍；候选替补：{ } [ ] | : ; &lt; &gt; `）</p>
+  <table id="t-en"></table>
+  <p class="sect"><b>数学与单位 20</b>（已确认全上；候选替补：∞ π µ ×？）</p>
+  <table id="t-math"></table>
+
+  <p class="note">说明：每个键"显示什么就插入什么"；表中同时标注字符码点，避免 × ÷ − 与字母/斜杠混淆。ASCII 输入框（邮箱/网址/密码）打开时默认切到"英文符号"分类。</p>
+</div>
+
+<script>
+const groups = {
+  cn: [["，","逗号"],["。","句号"],["、","顿号"],["；","分号"],["：","冒号"],["！","叹号"],["？","问号"],["“","左双引"],["”","右双引"],["‘","左单引"],
+       ["’","右单引"],["（","左括号"],["）","右括号"],["《","书名左"],["》","书名右"],["【","方头左"],["】","方头右"],["「","直角左"],["」","直角右"],["…","省略号"]],
+  en: [["!","叹号"],["@","at"],["#","井号"],["$","美元"],["%","百分"],["^","脱字符"],["&","与号"],["*","星号"],["(","左圆括"],[")","右圆括"],
+       ["-","连字符"],["_","下划线"],["=","等号"],["+","加号"],["/","斜杠"],["\\","反斜杠"],["'","单引号"],["\"","双引号"],["?","问号"],["~","波浪号"]],
+  math: [["+","加"],["−","减(U+2212)"],["×","乘"],["÷","除"],["=","等号"],["≠","不等于"],["≈","约等"],["≤","小于等于"],["≥","大于等于"],["±","正负"],
+       ["%","百分号"],["‰","千分号"],["°","度"],["℃","摄氏度"],["€","欧元"],["¥","日元/人民币"],["£","英镑"],["$","美元"],["√","根号"],["∞","无穷"]]
+};
+function cp(c){ return "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4,"0"); }
+function show(g){
+  document.querySelectorAll('.cat').forEach(el=>el.classList.remove('on'));
+  document.getElementById('cat-'+g).classList.add('on');
+  document.querySelectorAll('.cat .state').forEach(el=>el.textContent='');
+  document.getElementById('st-'+g).textContent = '当前';
+  const data = groups[g];
+  for (let r=0;r<2;r++){
+    const row = document.getElementById(r===0?'row1':'row2');
+    row.innerHTML = '';
+    for (let i=0;i<10;i++){
+      const [ch,nm] = data[r*10+i];
+      const d = document.createElement('div'); d.className='key';
+      d.title = cp(ch);
+      d.innerHTML = '<span class="ch"></span><span class="nm"></span>';
+      d.querySelector('.ch').textContent = ch;
+      d.querySelector('.nm').textContent = nm;
+      d.onclick = ()=>alert('样稿示意：插入「'+ch+'」('+cp(ch)+')');
+      row.appendChild(d);
+    }
+  }
+  const table = document.getElementById('t-'+g);
+  table.innerHTML = '<tr><th>字符</th><th>名称</th><th>码点</th><th>字符</th><th>名称</th><th>码点</th></tr>';
+  for (let i=0;i<10;i++){
+    const [c1,n1] = data[i], [c2,n2] = data[i+10];
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+c1+'</td><td>'+n1+'</td><td class="cp">'+cp(c1)+'</td>'
+                 + '<td>'+c2+'</td><td>'+n2+'</td><td class="cp">'+cp(c2)+'</td>';
+    table.appendChild(tr);
+  }
+}
+show('cn');
+</script>
+</body>
+</html>
