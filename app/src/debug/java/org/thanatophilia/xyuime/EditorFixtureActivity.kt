@@ -97,7 +97,7 @@ class EditorFixtureActivity : ComponentActivity() {
             id = R.id.fixture_web_view
             settings.javaScriptEnabled = true
             webViewClient = WebViewClient()
-            loadDataWithBaseURL(null, "<!doctype html><meta name=viewport content='width=device-width'><title>Web fixture</title><body><h3>Web input fixture</h3><textarea id='area' rows='5' aria-label='Web textarea' style='width:100%'></textarea><input id='input' aria-label='Web input' style='width:100%'></body>", "text/html", "UTF-8", null)
+            loadDataWithBaseURL(null, "<!doctype html><meta name=viewport content='width=device-width'><title>Web fixture</title><body><h3>Web input fixture</h3><textarea id='area' rows='5' aria-label='Web textarea' style='width:100%'></textarea><input id='input' aria-label='Web input' style='width:100%'><div id='editable' contenteditable='true' aria-label='Web editable' style='width:100%;border:1px solid #888;min-height:2em'></div></body>", "text/html", "UTF-8", null)
         })
     }
 
