@@ -315,7 +315,7 @@ class ImePhase6WindowAccessibilityTest {
         node("key:q")
     }
 
-    @Test fun webContentEditableReceivesChineseCandidate() = withImeEditor(EditorFixtureActivity.FIXTURE_WEB) { host ->
+    @Test fun webContentEditableReceivesChineseCandidate() = withImeEditor(EditorFixtureActivity.FIXTURE_WEB_EDITABLE) { host ->
         val web = host.findViewById<WebView>(R.id.fixture_web_view)
         val loaded = CountDownLatch(1)
         instrumentation.runOnMainSync {
@@ -325,13 +325,10 @@ class ImePhase6WindowAccessibilityTest {
             web.reload()
         }
         assertTrue("Web fixture must load", loaded.await(10, TimeUnit.SECONDS))
-        // The contenteditable div renders as the lowest editable node in the page; click it
-        // directly so the IME connects to the right element without fragile JS callbacks.
-        val edits = device.findObjects(By.clazz("android.widget.EditText").pkg(pkg))
-            .filter { !it.visibleBounds.isEmpty }
-            .sortedByDescending { it.visibleBounds.bottom }
-        require(edits.isNotEmpty()) { "Web fixture must expose editable nodes" }
-        edits.first().click()
+        // This local page has exactly one editable element, so the actual tap cannot target
+        // the textarea/input from a different scenario. Wait for WebView accessibility too.
+        val editable = device.waitForFreshObject(By.clazz("android.widget.EditText").pkg(pkg), 10_000)
+        requireNotNull(editable) { "Contenteditable must expose its editable node" }.click()
         device.waitForIdle()
         instrumentation.runOnMainSync {
             host.getSystemService(InputMethodManager::class.java).showSoftInput(web, InputMethodManager.SHOW_IMPLICIT)

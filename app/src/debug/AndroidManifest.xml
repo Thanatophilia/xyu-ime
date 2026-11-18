@@ -5,5 +5,7 @@
             android:name=".EditorFixtureActivity"
             android:exported="false"
             android:theme="@style/Theme.Xyu" />
+        <activity android:name=".KeyboardTestActivity" android:exported="false"
+            android:theme="@style/Theme.Xyu" />
     </application>
 </manifest>

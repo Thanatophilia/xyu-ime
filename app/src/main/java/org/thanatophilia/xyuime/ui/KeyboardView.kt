@@ -249,8 +249,10 @@ fun XyuKeyboard(
     val compactLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     // Reserve the candidate strip in the fixed keyboard height. Showing a composition only
     // changes the strip's contents, never the letter area or bottom row geometry.
-    val preferredHeight = if (compactLandscape) 191.dp else 286.dp
-    val maximumHeight = if (compactLandscape) 203.dp else 299.dp
+    // Compact keys have 48dp accessibility/touch expansion even when drawn at 34dp.
+    // Reserve its vertical extent inside the IME content, before the system footer inset.
+    val preferredHeight = if (compactLandscape) 199.dp else 286.dp
+    val maximumHeight = if (compactLandscape) 211.dp else 299.dp
 
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) XyuDarkColors else XyuLightColors,
@@ -306,6 +308,7 @@ private fun KeyboardSurface(
     val density = LocalDensity.current
     val fontScale = density.fontScale
     val outerPadding = if (compactLandscape) 4.dp else 5.dp
+    val verticalPadding = if (compactLandscape) 8.dp else outerPadding
     val rowGap = if (compactLandscape) 3.dp else 5.dp
     // Always reserved, so pinyin composition cannot push or squeeze the letter keys.
     val stripHeight = if (compactLandscape) 34.dp else 46.dp
@@ -341,14 +344,14 @@ private fun KeyboardSurface(
         animationSpec = tween(180), label = "candidateDrawer")
     val bottomHeight = if (compactLandscape) 34.dp else 47.dp
     val panelHeight = (
-        keyboardHeight - (outerPadding * 2) - stripHeight - bottomHeight - (rowGap * 2)
+        keyboardHeight - (verticalPadding * 2) - stripHeight - bottomHeight - (rowGap * 2)
     ).coerceAtLeast(1.dp)
     val keyShape = RoundedCornerShape(if (compactLandscape) 7.dp else 9.dp)
 
     Column(
         modifier = modifier
             .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = outerPadding, vertical = outerPadding),
+            .padding(horizontal = outerPadding, vertical = verticalPadding),
         verticalArrangement = Arrangement.spacedBy(rowGap),
     ) {
         if (state.preedit.isNotEmpty()) CandidateStrip(state, onAction, stripScroll,

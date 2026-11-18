@@ -16,7 +16,7 @@ import org.thanatophilia.xyuime.ui.XyuKeyboard
 
 /** Actual Compose semantics actions: complements UIAutomator descriptions, not a TalkBack claim. */
 class KeyboardAccessibilityTest {
-    @get:Rule val rule = createAndroidComposeRule<EditorFixtureActivity>()
+    @get:Rule val rule = createAndroidComposeRule<KeyboardTestActivity>()
 
     @Test fun shiftExposesLowerUpperLockedAndChineseStates() {
         var state by mutableStateOf(KeyboardUiState())

@@ -21,7 +21,7 @@ class EditorFixtureActivity : ComponentActivity() {
         val fixture = intent.getStringExtra(EXTRA_FIXTURE)
         setContentView(
             when (fixture) {
-                FIXTURE_WEB -> webLayout()
+                FIXTURE_WEB, FIXTURE_WEB_EDITABLE -> webLayout(fixture == FIXTURE_WEB_EDITABLE)
                 FIXTURE_SWITCH -> switchLayout()
                 FIXTURE_PASSWORD, FIXTURE_NUMBER -> specialLayout(fixture)
                 else -> nativeLayout(if (fixture == FIXTURE_MULTILINE) android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE else android.text.InputType.TYPE_CLASS_TEXT)
@@ -91,14 +91,21 @@ class EditorFixtureActivity : ComponentActivity() {
         })
     }
 
-    private fun webLayout(): LinearLayout = LinearLayout(this).apply {
+    private fun webLayout(contentEditable: Boolean): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         addView(WebView(this@EditorFixtureActivity).apply {
             id = R.id.fixture_web_view
             settings.javaScriptEnabled = true
             webViewClient = WebViewClient()
-            loadDataWithBaseURL(null, "<!doctype html><meta name=viewport content='width=device-width'><title>Web fixture</title><body><h3>Web input fixture</h3><textarea id='area' rows='5' aria-label='Web textarea' style='width:100%'></textarea><input id='input' aria-label='Web input' style='width:100%'><div id='editable' contenteditable='true' aria-label='Web editable' style='width:100%;border:1px solid #888;min-height:2em'></div></body>", "text/html", "UTF-8", null)
-        })
+            val editors = if (contentEditable) {
+                "<div id='editable' role='textbox' contenteditable='true' aria-label='Web editable' style='width:95%;border:1px solid #888;min-height:120px'></div>"
+            } else {
+                "<textarea id='area' rows='5' aria-label='Web textarea' style='width:95%'></textarea><input id='input' aria-label='Web input' style='width:95%'>"
+            }
+            loadDataWithBaseURL(null,
+                "<!doctype html><meta name=viewport content='width=device-width'><title>Web fixture</title><body><h3>Web input fixture</h3>$editors</body>",
+                "text/html", "UTF-8", null)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT))
     }
 
     companion object {
@@ -106,6 +113,7 @@ class EditorFixtureActivity : ComponentActivity() {
         const val FIXTURE_NATIVE = "native"
         const val FIXTURE_MULTILINE = "multiline"
         const val FIXTURE_WEB = "web"
+        const val FIXTURE_WEB_EDITABLE = "web-editable"
         const val FIXTURE_SWITCH = "switch"
         const val FIXTURE_PASSWORD = "password"
         const val FIXTURE_NUMBER = "number"
