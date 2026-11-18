@@ -22,6 +22,8 @@ import org.junit.runner.RunWith
 import org.thanatophilia.xyuime.ime.XyuImeService
 import org.thanatophilia.xyuime.rime.EngineBridge
 import org.thanatophilia.xyuime.rime.RimeOutput
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * D2: composition vs editing and the serial engine queue. A controllable fake engine holds
@@ -181,7 +183,7 @@ class ImePhase4CompositionEditTest {
         tap("key:空格")
         fake.flushAll()
         awaitSnapshot({ Snapshot(textOf(host, R.id.fixture_editor_a), null, emptyList()) },
-            "Space must commit the whole code exactly once, in order") {
+            "Space must commit the whole code exactly once, in order; ops=${fake.operations}") {
             it.text == "nihao"
         }
         freshTree()
@@ -213,6 +215,11 @@ class ImePhase4CompositionEditTest {
         device.waitForIdle()
         fake.flushAll()
         device.waitForIdle()
+        // The second field keeps the language preference (Chinese); switch to English so a
+        // literal reaches the committed text directly.
+        tap("key:切换语言，长按切换输入法")
+        assertNotNull("English header must appear on the new editor",
+            device.waitForFreshObject(By.text("絮雨 · English").pkg(pkg), 10_000))
         typeLetters("ok")
         device.waitForIdle()
         assertEquals("New field receives only its own input", "ok", textOf(host, R.id.fixture_editor_b))
@@ -328,8 +335,11 @@ private class FakeEngineBridge : EngineBridge {
     override fun close() { reset() }
 
     fun flushAll() {
-        // Callbacks drain the action queue synchronously, which may re-enter request() and
-        // re-hold the next key; keep flushing until no reply is pending.
+        // Callbacks drain the action queue synchronously on the main looper, which may
+        // re-enter request() and re-hold the next key. After each batch, wait for the main
+        // thread to finish processing (barrier runnable) before checking for new pending
+        // replies, so the test never races ahead of the IME.
+        val main = Handler(Looper.getMainLooper())
         while (true) {
             val batch: List<Pair<RimeOutput, (RimeOutput) -> Unit>>
             synchronized(held) {
@@ -337,7 +347,10 @@ private class FakeEngineBridge : EngineBridge {
                 batch = held.toList()
                 held.clear()
             }
-            batch.forEach { (out, callback) -> post(out, callback) }
+            batch.forEach { (out, callback) -> main.post { callback(out) } }
+            val barrier = CountDownLatch(1)
+            main.post { barrier.countDown() }
+            if (!barrier.await(5, TimeUnit.SECONDS)) error("Main thread did not drain engine replies")
         }
     }
 
