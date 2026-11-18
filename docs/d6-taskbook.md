@@ -57,7 +57,9 @@ D6 先把这些高风险边界锁住，再进入 D7 性能和稳定测试版。
 - Android Rime 测试：候选、选词、用户词/生成句复用、重置、多个前端 owner、共享资源损坏重装、用户 sentinel 保留；
 - CI release APK 的签名、双 ABI、ZIP/ELF 16 KB 静态检查。
 
-这些证明了很多局部逻辑，但仍不等于：
+这些证明了很多局部逻辑，但边界需要准确理解：`RimeEngineTest.generatedAndLearnedSentenceKeepDictionarySyllables()` 在同一个 Android test 进程中复用同一个 `RimeEngine`，每轮调用的是 `engine.reset()`（销毁会话、未关闭整个引擎/杀进程），因此证明的是当前引擎实例中的学习句复用，不证明 user DB 已完成磁盘落盘，更不证明 force-stop 或覆盖安装后仍能恢复。`RimeDeploymentTest` 使用 `Files.createTempDirectory` 下的普通文件和注入回调，不是 Android 实际 user DB 或真实进程崩溃。
+
+现有测试仍不等于：
 
 - 用户从旧 APK 覆盖安装到新 APK 后真实学习数据保留；
 - 真实 Android 进程被强杀后恢复；
@@ -207,6 +209,7 @@ D6 的工作重点是补这些**真实证据**，而不是重复已有 UI 或候
 - 至少结合候选 comment/reading、用户目录摘要或测试专用导出探针；
 - artifact 只放哈希、文件名、版本和 PASS/FAIL，不上传完整用户词库；
 - 如果 JNI 当前没有安全的用户词查询接口，增加 debug/test-only 的计数或哈希观测，不把接口暴露给发布 APK。
+- 不要在 native 数据库仍打开时直接遍历、复制、散列或读取 `user/` 下的 LevelDB 文件；关闭引擎并确认 native shutdown 成功后再取文件级摘要。若需要在运行时证明某词已进入 user DB，优先使用 librime 受控查询/导出 API；没有安全 API 时就在测试构建内，在 worker 上执行 flush/sync → shutdown → 摘要 → 冷启动查询。明确区分“测试探针触发了 flush”与“普通用户退出时系统保证 flush”的证据。
 
 **完成门槛**：U01—U06 全部通过，且升级前后用户目录摘要一致、shared 目录可变化。
 
