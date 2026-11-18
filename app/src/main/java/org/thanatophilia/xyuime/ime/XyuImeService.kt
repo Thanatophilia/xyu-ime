@@ -46,6 +46,15 @@ import org.thanatophilia.xyuime.ui.XyuKeyboard
 
 /** A normal system IME window. No overlay, accessibility, or OEM setting access. */
 class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+    companion object {
+        /**
+         * Test-only seam: when set, service creation uses this engine instead of RimeEngine.
+         * Must be installed while no XyuImeService instance exists (disable the IME first),
+         * and cleared again afterwards. Production builds never set it.
+         */
+        @Volatile
+        var engineOverride: org.thanatophilia.xyuime.rime.EngineBridge? = null
+    }
     private val registry = LifecycleRegistry(this)
     private val savedState = SavedStateRegistryController.create(this)
     override val lifecycle: Lifecycle get() = registry
@@ -63,7 +72,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     private var selectionEnd = -1
     private var selectionAnchor: Int? = null
     private var requestedSelection: Pair<Int, Int>? = null
-    private lateinit var rime: org.thanatophilia.xyuime.rime.RimeEngine
+    private lateinit var rime: org.thanatophilia.xyuime.rime.EngineBridge
     private val chineseSession = ChineseSession()
     private val actions = ArrayDeque<KeyboardAction>()
     private var engineBusy = false
@@ -205,7 +214,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
         savedState.performAttach()
         savedState.performRestore(null)
         super.onCreate()
-        rime = org.thanatophilia.xyuime.rime.RimeEngine(this)
+        rime = engineOverride ?: org.thanatophilia.xyuime.rime.RimeEngine(this)
         registry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
         installWindowOwners()
     }

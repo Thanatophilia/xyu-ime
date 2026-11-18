@@ -31,7 +31,7 @@ data class RimeOutput(
 }
 
 /** All native calls, including deployment, run on one process-wide serial worker. */
-class RimeEngine(context: Context) {
+class RimeEngine(context: Context) : EngineBridge {
     companion object {
         private val worker = Executors.newSingleThreadExecutor { task -> Thread(task, "RimeWorker") }
         private var initialized = false
