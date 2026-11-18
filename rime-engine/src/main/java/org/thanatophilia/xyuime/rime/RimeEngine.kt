@@ -86,7 +86,7 @@ class RimeEngine(context: Context) : EngineBridge {
      * COMMIT commits Rime's composition; raw-pinyin Return uses keysym 0xff0d instead.
      * cursor is a UTF-16 offset; commitText is drained exactly once by every request.
      */
-    fun request(sessionId: Int, operation: Int = 0, key: Int = 0, limit: Int = 64,
+    override fun request(sessionId: Int, operation: Int = 0, key: Int = 0, limit: Int = 64,
                 callback: (RimeOutput) -> Unit) {
         if (closed) return
         val epoch = generation.get()
@@ -125,7 +125,7 @@ class RimeEngine(context: Context) : EngineBridge {
         if (previous != 0L) NativeRime.destroySession(previous)
     }
 
-    fun reset() {
+    override fun reset() {
         generation.incrementAndGet()
         worker.execute {
             try { destroySession() } catch (_: Exception) {
