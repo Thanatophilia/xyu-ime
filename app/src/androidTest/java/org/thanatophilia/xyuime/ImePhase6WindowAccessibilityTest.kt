@@ -121,7 +121,11 @@ class ImePhase6WindowAccessibilityTest {
             val rotateDeadline = SystemClock.uptimeMillis() + 30_000
             while (SystemClock.uptimeMillis() < rotateDeadline &&
                 device.findObject(By.res("key:q").pkg(pkg)) == null) {
-                if (waited > 0 && waited % 2000 == 0L) {
+                if (waited > 0 && waited % 3000 == 0L) {
+                    // The IME window is torn down on rotation; refocus the editor and ask the
+                    // system again until the keyboard returns.
+                    val editable = device.findObject(By.clazz("android.widget.EditText").pkg(pkg))
+                    editable?.click()
                     instrumentation.runOnMainSync {
                         host.getSystemService(InputMethodManager::class.java)
                             .showSoftInput(host.currentFocus, InputMethodManager.SHOW_IMPLICIT)

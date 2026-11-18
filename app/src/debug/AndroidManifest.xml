@@ -4,6 +4,7 @@
         <activity
             android:name=".EditorFixtureActivity"
             android:exported="false"
-            android:theme="@style/Theme.Xyu" />
+            android:theme="@style/Theme.Xyu"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
     </application>
 </manifest>
