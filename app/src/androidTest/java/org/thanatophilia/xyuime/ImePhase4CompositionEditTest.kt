@@ -1,7 +1,6 @@
 package org.thanatophilia.xyuime
 
 import android.app.Activity
-import android.app.Instrumentation
 import android.content.Intent
 import android.os.SystemClock
 import android.text.InputType
@@ -77,7 +76,7 @@ class ImePhase4CompositionEditTest {
         var activity: Activity? = null
         try {
             device.executeShellCommand("ime disable $imeId")
-            val fake = FakeEngineBridge(instrumentation)
+            val fake = FakeEngineBridge()
             XyuImeService.engineOverride = fake
             device.executeShellCommand("ime enable $imeId")
             device.executeShellCommand("ime set $imeId")
@@ -219,15 +218,19 @@ class ImePhase4CompositionEditTest {
             "", textOf(host, R.id.fixture_editor_a))
     }
 
-    /** Opening the editing panel ends the composition exactly once; cursor moves and Chinese resume. */
-    @Test fun compositionEndsOnceBeforeEditingPanelAndEditingResumesChinese() = withRealChineseEditor { host, editor, snapshot ->
+    /** The editing tool is only reachable without a composition; raw commit ends it exactly once. */
+    @Test fun editingPanelAfterRawCommitMovesCursorAndResumesChinese() = withRealChineseEditor { host, editor, snapshot ->
         typeLetters("nihao")
         awaitSnapshot(snapshot, "Composition must be active") { it.composing?.replace(" ", "") == "nihao" }
+        enterWith("完成")
+        awaitSnapshot(snapshot, "Raw commit must end the composition exactly once") {
+            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        }
         tap("edit_toggle")
         node("key:光标左移").click()
         device.waitForIdle()
-        awaitSnapshot(snapshot, "Opening the panel must commit raw once, then move the cursor") {
-            it.text == "nihao" && it.composing == null && it.actions.isEmpty()
+        awaitSnapshot(snapshot, "Editing moves the cursor over committed text") {
+            it.text == "nihao" && it.composing == null
         }
         tap("edit_toggle")
         typeLetters("x")
@@ -263,7 +266,7 @@ class ImePhase4CompositionEditTest {
 }
 
 /** Deterministic stand-in for librime: replies can be held and flushed from the test. */
-private class FakeEngineBridge(private val instrumentation: Instrumentation) : EngineBridge {
+private class FakeEngineBridge : EngineBridge {
     @Volatile var hold = false
     val operations = mutableListOf<String>()
     private var code = ""
@@ -337,6 +340,8 @@ private class FakeEngineBridge(private val instrumentation: Instrumentation) : E
     }
 
     private fun post(out: RimeOutput, callback: (RimeOutput) -> Unit) {
-        instrumentation.runOnMainSync { callback(out) }
+        // Always deliver on the main looper, like RimeEngine does: the service may call
+        // request() from the main thread during prepareChinese, where runOnMainSync would fail.
+        Handler(Looper.getMainLooper()).post { callback(out) }
     }
 }
