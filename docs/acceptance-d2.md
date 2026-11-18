@@ -10,7 +10,7 @@
   - 候选页长按删除删空拼音即停、已上屏正文不动（真实引擎）。
 - APK SHA256：`202e51fd13ac893e4e504ebe892c6c45e37e610fc6dc1a721400e9c639e4211b`。签名 v2、双 ABI、ZIP/ELF 16 KB 静态对齐、原生 verifier 校验通过。
 - 本轮实现：`EngineBridge` 引擎接口（生产为 RimeEngine，测试可注入可控延迟 fake）；`XyuImeService.engineOverride` 测试注入点，仅测试使用、发布不影响；组合态行为表 `docs/composition-behavior.md`。
-- 未改键盘布局、候选交互、引擎、部署和资源。
+- **实机验收：2026-11-18，用户确认 0.3.82 测试无问题，D2 验收通过。** 组合态、编辑联动、动作队列与候选长按边界按本轮清单核验通过。
 
 ## 手机验收步骤
 
