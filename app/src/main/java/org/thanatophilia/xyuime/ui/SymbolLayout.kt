@@ -65,10 +65,24 @@ internal object SymbolLayout {
     fun initialGroup(asciiEditor: Boolean): SymbolGroup =
         if (asciiEditor) SymbolGroup.EnglishSymbols else SymbolGroup.ChinesePunctuation
 
-    /** Swipe mapping used by the page: forward = next group, backward = previous, both cyclic. */
-    fun next(group: SymbolGroup, forward: Boolean): SymbolGroup {
-        val index = groups.indexOf(group)
-        val next = if (forward) (index + 1) % groups.size else (index + groups.size - 1) % groups.size
-        return groups[next]
+    private const val MIDDLE_CYCLE = 1000
+    val pageCount: Int get() = groups.size * (MIDDLE_CYCLE * 2 + 1)
+
+    fun groupAtPage(page: Int): SymbolGroup = groups[page % groups.size]
+
+    fun middlePage(group: SymbolGroup): Int = groups.size * MIDDLE_CYCLE + group.ordinal
+
+    fun isNearPageLimit(page: Int): Boolean = page < groups.size || page >= pageCount - groups.size
+
+    /** Tabs animate to the nearest copy of their group, including across the cycle boundary. */
+    fun nearestPage(page: Int, group: SymbolGroup): Int {
+        val count = groups.size
+        val forward = (group.ordinal - page % count + count) % count
+        val nearest = page + if (forward <= count / 2) forward else forward - count
+        return when {
+            nearest < 0 -> nearest + count
+            nearest >= pageCount -> nearest - count
+            else -> nearest
+        }
     }
 }

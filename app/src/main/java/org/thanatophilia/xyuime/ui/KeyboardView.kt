@@ -1,6 +1,7 @@
 package org.thanatophilia.xyuime.ui
 
 import android.content.res.Configuration
+import android.graphics.Paint
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.animation.core.animateFloatAsState
@@ -21,7 +22,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -63,7 +69,6 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlin.math.roundToInt
@@ -73,6 +78,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,22 +88,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
@@ -110,6 +122,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -342,10 +355,23 @@ private fun KeyboardSurface(
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
     var wordFilter by remember(state.candidateRevision) { mutableStateOf(CandidateWordFilter.All) }
-    // D5 symbol page group: ASCII editors open on the English group; switching editors
-    // resets to that editor's default. In-page swipes/taps only change this UI state.
-    var symbolGroup by remember(state.symbolAscii) {
+    // Retain the settled group when leaving the page in the same editor. A new input
+    // session gets its existing ASCII-aware default and fresh vertical scroll positions.
+    var lastSymbolGroup by remember(state.symbolAscii) {
         mutableStateOf(SymbolLayout.initialGroup(state.symbolAscii))
+    }
+    val symbolPager = if (state.page == KeyboardPage.Symbols) key(state.symbolAscii) {
+        rememberPagerState(initialPage = SymbolLayout.middlePage(lastSymbolGroup)) { SymbolLayout.pageCount }
+    } else null
+    val symbolGroup = symbolPager?.let { SymbolLayout.groupAtPage(it.settledPage) }
+    if (symbolPager != null) LaunchedEffect(symbolPager) {
+        snapshotFlow { symbolPager.settledPage }.collect { page ->
+            val group = SymbolLayout.groupAtPage(page)
+            lastSymbolGroup = group
+            // Thousands of virtual positions, but only visible pages are composed. If an
+            // edge is ever reached, jump between identical settled groups, not during a drag.
+            if (SymbolLayout.isNearPageLimit(page)) symbolPager.scrollToPage(SymbolLayout.middlePage(group))
+        }
     }
     var syllableSelectionRequest by remember(state.candidateRevision) { mutableStateOf(0L) }
     LaunchedEffect(selectedSyllable, wordFilter, drawerScroll, syllableSelectionRequest, drawerStart) {
@@ -436,8 +462,7 @@ private fun KeyboardSurface(
                 )
 
                 KeyboardPage.Symbols -> SymbolsPagePanel(
-                    group = symbolGroup,
-                    onSelectGroup = { symbolGroup = it },
+                    pager = requireNotNull(symbolPager),
                     onAction = onAction,
                     fontScale = fontScale,
                     compactLandscape = compactLandscape,
@@ -861,15 +886,10 @@ private fun NumbersPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> U
         modifier, KeyboardAction.ToggleNumbers)
 }
 
-/**
- * D5 symbol page: category tabs on top, a vertically scrollable grid that switches groups
- * on horizontal swipes, and a one-cell delete key floating on the grid's bottom-right corner.
- * Only this panel changes: the keyboard frame, info strip and bottom row are untouched.
- */
+/** The horizontal pager moves the symbol grids while the tabs and delete key stay fixed. */
 @Composable
 private fun SymbolsPagePanel(
-    group: SymbolGroup,
-    onSelectGroup: (SymbolGroup) -> Unit,
+    pager: PagerState,
     onAction: (KeyboardAction) -> Unit,
     fontScale: Float,
     compactLandscape: Boolean,
@@ -877,11 +897,16 @@ private fun SymbolsPagePanel(
     rowGap: Dp,
     modifier: Modifier,
 ) {
-    val items = SymbolLayout.items(group)
     val tabHeight = if (compactLandscape) 30.dp else 34.dp
     val keyHeight = if (compactLandscape) 40.dp else 43.dp
     val gap = KeyboardGeometry.KEY_GAP_DP.dp
-    val gridState = remember(group) { LazyGridState() }
+    val settledPage = pager.settledPage
+    val group = SymbolLayout.groupAtPage(settledPage)
+    val scope = rememberCoroutineScope()
+    fun selectGroup(candidate: SymbolGroup) {
+        val target = SymbolLayout.nearestPage(pager.currentPage, candidate)
+        scope.launch { pager.animateScrollToPage(target, animationSpec = tween(220)) }
+    }
     Column(modifier) {
         Row(Modifier.fillMaxWidth().height(tabHeight),
             horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -891,7 +916,7 @@ private fun SymbolsPagePanel(
                     .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surface)
                     .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f), keyShape)
-                    .clickable { onSelectGroup(candidate) }
+                    .clickable { selectGroup(candidate) }
                     .clearAndSetSemantics {
                         testTagsAsResourceId = true
                         testTag = "symbol_tab:${candidate.key}"
@@ -899,7 +924,7 @@ private fun SymbolsPagePanel(
                         role = Role.Tab
                         contentDescription = candidate.title
                         stateDescription = if (isSelected) "当前" else "未选中"
-                        onClick { onSelectGroup(candidate); true }
+                        onClick { selectGroup(candidate); true }
                     },
                     contentAlignment = Alignment.Center) {
                     Text(candidate.title, fontSize = adaptiveSp(12f, fontScale, 15f),
@@ -912,47 +937,24 @@ private fun SymbolsPagePanel(
         }
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(top = rowGap)) {
             val cellWidth = (maxWidth - gap * (SYMBOL_COLUMNS - 1)) / SYMBOL_COLUMNS
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(SYMBOL_COLUMNS),
-                state = gridState,
-                modifier = Modifier.fillMaxSize()
-                    .semantics { testTagsAsResourceId = true; testTag = "symbol_grid" }
-                    .pointerInput(group) {
-                        // Horizontal swipes switch group; vertical drags stay with the grid.
-                        // The direction is decided once per gesture from the dominant axis.
-                        val threshold = 48.dp.toPx()
-                        val slop = viewConfiguration.touchSlop
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            var totalX = 0f
-                            var totalY = 0f
-                            var horizontal: Boolean? = null
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                if (!change.pressed) break
-                                totalX += change.positionChange().x
-                                totalY += change.positionChange().y
-                                if (horizontal == null && (abs(totalX) > slop || abs(totalY) > slop)) {
-                                    horizontal = abs(totalX) > abs(totalY)
-                                }
-                                if (horizontal == true) change.consume()
-                            }
-                            if (horizontal == true && abs(totalX) > threshold) {
-                                onSelectGroup(SymbolLayout.next(group, forward = totalX < 0))
-                            }
-                        }
-                    },
-                contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
-                verticalArrangement = Arrangement.spacedBy(gap),
-                horizontalArrangement = Arrangement.spacedBy(gap),
-            ) {
-                itemsIndexed(items) { index, item ->
-                    SymbolGridKey(item, group, index, keyHeight, keyShape, fontScale, onAction)
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                HorizontalPager(
+                    state = pager,
+                    modifier = Modifier.fillMaxSize().clipToBounds()
+                        .semantics { testTagsAsResourceId = true; testTag = "symbol_grid" },
+                    flingBehavior = PagerDefaults.flingBehavior(pager,
+                        snapAnimationSpec = tween(220), snapPositionalThreshold = 0.2f),
+                    verticalAlignment = Alignment.Top,
+                ) { page ->
+                    val displayedGroup = SymbolLayout.groupAtPage(page)
+                    // Retained adjacent pages are visual only. Do not let an animating page
+                    // insert symbols or remain focusable to TalkBack after the group changes.
+                    val active = !pager.isScrollInProgress && page == pager.settledPage
+                    SymbolGridContent(displayedGroup, page == pager.settledPage, active,
+                        keyHeight, keyShape, fontScale, gap, pager.settledPage, onAction)
                 }
             }
-            // One ordinary-looking cell above the grid. One input path owns both the
-            // initial press and repeat cancellation; accessibility invokes the same action.
+            // One ordinary-looking cell above the grid. It stays anchored while groups slide.
             KeyFace("", "删除，长按连续删除", fontScale, keyShape,
                 Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight).zIndex(1f),
                 repeat = true, customTag = "key:删除", icon = "delete", plainSurface = true,
@@ -962,30 +964,72 @@ private fun SymbolsPagePanel(
 }
 
 @Composable
+private fun SymbolGridContent(
+    group: SymbolGroup,
+    settled: Boolean,
+    active: Boolean,
+    keyHeight: Dp,
+    keyShape: Shape,
+    fontScale: Float,
+    gap: Dp,
+    settledPage: Int,
+    onAction: (KeyboardAction) -> Unit,
+) {
+    val items = SymbolLayout.items(group)
+    // Revisited categories still start at the top, as before; a vertical drag in the current
+    // page keeps using this same LazyGridState and is independent of the horizontal pager.
+    val gridState = remember(group, settledPage) { LazyGridState() }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(SYMBOL_COLUMNS),
+        state = gridState,
+        modifier = Modifier.fillMaxSize().semantics {
+            testTagsAsResourceId = true
+            testTag = "symbol_page:${group.key}"
+            if (!active) hideFromAccessibility()
+        },
+        contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
+        verticalArrangement = Arrangement.spacedBy(gap),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+    ) {
+        itemsIndexed(items) { index, item ->
+            SymbolGridKey(item, group, index, keyHeight, keyShape, fontScale,
+                active = active, tagged = settled, onAction = onAction)
+        }
+    }
+}
+
+@Composable
 private fun SymbolGridKey(item: SymbolItem, group: SymbolGroup, index: Int, height: Dp,
-    shape: Shape, fontScale: Float, onAction: (KeyboardAction) -> Unit) {
+    shape: Shape, fontScale: Float, active: Boolean, tagged: Boolean,
+    onAction: (KeyboardAction) -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val fontSize = adaptiveSp(19f, fontScale, 22f)
     Box(Modifier.fillMaxWidth().height(height).clip(shape)
         .background(if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White)
         .border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
-        .clickable { onAction(KeyboardAction.Text(item.text)) }
+        .drawWithCache {
+            // Center the visible ink, not a line box/baseline: full-width punctuation has
+            // asymmetric font bearings and otherwise still looks off-center with Alignment.Center.
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = colors.onSurface.toArgb()
+                textSize = fontSize.toPx()
+            }
+            val ink = android.graphics.Rect()
+            paint.getTextBounds(item.text, 0, item.text.length, ink)
+            val x = (size.width - ink.width()) / 2f - ink.left
+            val y = (size.height - ink.height()) / 2f - ink.top
+            onDrawBehind { drawContext.canvas.nativeCanvas.drawText(item.text, x, y, paint) }
+        }
+        .clickable(enabled = active) { onAction(KeyboardAction.Text(item.text)) }
         .clearAndSetSemantics {
             testTagsAsResourceId = true
-            testTag = "symbol:${group.key}:$index"
-            contentDescription = item.name
+            if (tagged) testTag = "symbol:${group.key}:$index"
+            contentDescription = item.name // spoken only: no visible caption on the key
             text = AnnotatedString(item.text)
             role = Role.Button
-            onClick { onAction(KeyboardAction.Text(item.text)); true }
-        },
-        contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(item.text, color = colors.onSurface,
-                fontSize = adaptiveSp(19f, fontScale, 22f),
-                maxLines = 1, overflow = TextOverflow.Clip)
-            Text(item.name, color = colors.onSurfaceVariant, fontSize = 8.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
+            if (active) onClick { onAction(KeyboardAction.Text(item.text)); true }
+            else { disabled(); hideFromAccessibility() }
+        })
 }
 
 @Composable

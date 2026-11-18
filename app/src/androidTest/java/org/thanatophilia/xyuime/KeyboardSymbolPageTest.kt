@@ -3,7 +3,12 @@ package org.thanatophilia.xyuime
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.unit.toSize
+import kotlin.math.abs
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.junit.Assert.assertEquals
@@ -16,8 +21,11 @@ import org.thanatophilia.xyuime.ui.KeyboardUiState
 import org.thanatophilia.xyuime.ui.XyuKeyboard
 
 /** D5 Compose-level checks: tabs, group switching (tap + swipe), grid, delete cell, ABC key. */
+@OptIn(ExperimentalTestApi::class)
 class KeyboardSymbolPageTest {
-    @get:Rule val rule = createAndroidComposeRule<KeyboardTestActivity>()
+    @get:Rule val rule = createAndroidComposeRule<KeyboardTestActivity>(effectContext = object : MotionDurationScale {
+        override val scaleFactor = 1f
+    })
 
     private fun setKeyboard(ascii: Boolean, actions: MutableList<KeyboardAction>) {
         var state by mutableStateOf(KeyboardUiState(page = KeyboardPage.Symbols, symbolAscii = ascii))
@@ -25,6 +33,15 @@ class KeyboardSymbolPageTest {
             // The panel keeps its own group state; rerunning setContent is not needed.
             XyuKeyboard(state, onAction = { actions.add(it) })
         }
+    }
+
+    private fun saveScreenshot(name: String) {
+        val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        val device = androidx.test.uiautomator.UiDevice.getInstance(instrumentation)
+        val target = java.io.File(rule.activity.getExternalFilesDir(null), "$name.png")
+        assertTrue("Screenshot must be captured", device.takeScreenshot(target))
+        device.executeShellCommand("mkdir -p /sdcard/Download/xyu-ime-review")
+        device.executeShellCommand("cp ${target.absolutePath} /sdcard/Download/xyu-ime-review/$name.png")
     }
 
     @Test fun chineseEditorOpensChineseGroupWithFullRowsAndFloatingDelete() {
@@ -54,12 +71,15 @@ class KeyboardSymbolPageTest {
         assertEquals("delete sits at the grid's bottom edge", grid.bottom, delete.bottom, 1f)
         // The bottom bar's first key reads ABC on the symbol page.
         rule.onNodeWithTag("key:返回字母键盘").assertContentDescriptionEquals("返回字母键盘")
+        saveScreenshot("d5-centered-symbols")
     }
 
     @Test fun tabClickSwitchesGroupAndInsertsExactCharacters() {
         val actions = mutableListOf<KeyboardAction>()
         setKeyboard(ascii = false, actions)
         rule.onNodeWithTag("symbol:cn:2").assertContentDescriptionEquals("顿号")
+        rule.onNodeWithText("、").assertExists()
+        rule.onNodeWithText("顿号").assertDoesNotExist() // name is spoken, never rendered on the key face
         rule.onNodeWithTag("symbol:cn:2").performClick()
         rule.onNodeWithTag("symbol_tab:en").performClick()
         rule.onNodeWithTag("symbol_tab:en").assertIsSelected()
@@ -75,16 +95,67 @@ class KeyboardSymbolPageTest {
         }
     }
 
-    @Test fun horizontalSwipeSwitchesGroupWhileVerticalDragDoesNot() {
-        setKeyboard(ascii = false, actions = mutableListOf())
+    @Test fun horizontalSwipeCyclesAndVerticalDragOnlyScrollsCurrentGroup() {
+        val actions = mutableListOf<KeyboardAction>()
+        setKeyboard(ascii = false, actions)
+        rule.onNodeWithTag("symbol_grid").performTouchInput { swipeUp() }
+        rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
+        rule.onNodeWithTag("symbol:cn:26").assertIsDisplayed()
+        rule.onNodeWithTag("symbol_grid").performTouchInput { swipeDown() }
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
         rule.onNodeWithTag("symbol_tab:en").assertIsSelected()
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
+        rule.onNodeWithTag("symbol_tab:math").assertIsSelected()
+        rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
+        rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
+        rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
         rule.onNodeWithTag("symbol_tab:math").assertIsSelected()
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
         rule.onNodeWithTag("symbol_tab:en").assertIsSelected()
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
         rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
+        rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
+    }
+
+    @Test fun horizontalGridFollowsFingerAndSettlesWithoutMovingDelete() {
+        val actions = mutableListOf<KeyboardAction>()
+        setKeyboard(ascii = false, actions)
+        fun pageBounds(tag: String): Rect {
+            val n = rule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+            return Rect(n.positionInRoot, n.size.toSize())
+        }
+        val before = pageBounds("symbol_page:cn")
+        val delete = rule.onNodeWithTag("key:删除").fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.onNodeWithTag("symbol_grid").performTouchInput {
+                down(Offset(width * .8f, height * .35f))
+                moveTo(Offset(width * .42f, height * .35f), delayMillis = 96)
+            }
+            rule.mainClock.advanceTimeByFrame()
+            rule.mainClock.advanceTimeByFrame()
+            val dragged = pageBounds("symbol_page:cn")
+            assertTrue("Content must move before finger-up", dragged.left < before.left - before.width * .1f)
+            assertTrue("Current page must stay partly visible during drag", dragged.right > before.left)
+            saveScreenshot("d5-swipe-mid-drag")
+            assertEquals("Delete must stay fixed while symbols move", delete,
+                rule.onNodeWithTag("key:删除").fetchSemanticsNode().boundsInRoot)
+            rule.onNodeWithTag("symbol_grid").performTouchInput {
+                moveTo(Offset(width * .32f, height * .35f), delayMillis = 16)
+                up()
+            }
+            rule.mainClock.advanceTimeBy(80)
+            val snapping = pageBounds("symbol_page:en")
+            assertTrue("Adjacent group must enter continuously", snapping.left < before.right && snapping.right > before.left)
+            rule.mainClock.advanceTimeBy(500)
+            val settled = pageBounds("symbol_page:en")
+            assertTrue("Page must snap into the fixed viewport", abs(settled.left - before.left) < 2f)
+            rule.onNodeWithTag("symbol_tab:en").assertIsSelected()
+            rule.runOnIdle { assertTrue("Drag must not insert symbols", actions.isEmpty()) }
+        } finally {
+            rule.mainClock.autoAdvance = true
+            rule.mainClock.advanceTimeBy(500)
+        }
     }
 
     @Test fun asciiEditorDefaultsToEnglishGroupAndCanStillBrowseAll() {

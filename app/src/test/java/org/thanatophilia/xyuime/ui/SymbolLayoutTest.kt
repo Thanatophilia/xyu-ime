@@ -53,11 +53,24 @@ class SymbolLayoutTest {
     }
 
     @Test fun swipeNavigationWrapsBothWays() {
-        assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.next(SymbolGroup.ChinesePunctuation, forward = true))
-        assertEquals(SymbolGroup.MathUnits, SymbolLayout.next(SymbolGroup.EnglishSymbols, forward = true))
-        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.next(SymbolGroup.MathUnits, forward = true))
-        assertEquals(SymbolGroup.MathUnits, SymbolLayout.next(SymbolGroup.ChinesePunctuation, forward = false))
-        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.next(SymbolGroup.EnglishSymbols, forward = false))
-        assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.next(SymbolGroup.MathUnits, forward = false))
+        val page = SymbolLayout.middlePage(SymbolGroup.ChinesePunctuation)
+        assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.groupAtPage(page + 1))
+        assertEquals(SymbolGroup.MathUnits, SymbolLayout.groupAtPage(page + 2))
+        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.groupAtPage(page + 3))
+        assertEquals(SymbolGroup.MathUnits, SymbolLayout.groupAtPage(page - 1))
+        assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.groupAtPage(page - 2))
+        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.groupAtPage(page - 3))
+        for (position in 0 until SymbolLayout.pageCount) {
+            for (target in SymbolLayout.groups) {
+                val nearest = SymbolLayout.nearestPage(position, target)
+                assertTrue(nearest in 0 until SymbolLayout.pageCount)
+                assertEquals(target, SymbolLayout.groupAtPage(nearest))
+            }
+            if (SymbolLayout.isNearPageLimit(position)) {
+                val middle = SymbolLayout.middlePage(SymbolLayout.groupAtPage(position))
+                assertTrue(!SymbolLayout.isNearPageLimit(middle))
+                assertEquals(SymbolLayout.groupAtPage(position), SymbolLayout.groupAtPage(middle))
+            }
+        }
     }
 }
