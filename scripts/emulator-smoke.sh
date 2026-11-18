@@ -5,7 +5,7 @@ mkdir -p emulator-review
 adb shell settings put secure show_ime_with_hard_keyboard 1
 # Fail fast on the current window/accessibility work before the longer regression set.
 # Keep its reports separately: connectedDebugAndroidTest replaces its output directory.
-./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.thanatophilia.xyuime.ImePhase6WindowAccessibilityTest,org.thanatophilia.xyuime.KeyboardAccessibilityTest
+./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.thanatophilia.xyuime.ImePhase6WindowAccessibilityTest,org.thanatophilia.xyuime.KeyboardAccessibilityTest,org.thanatophilia.xyuime.KeyboardSymbolPageTest,org.thanatophilia.xyuime.ImePhase7SymbolInputTest
 result=$?
 if [ "$result" -eq 0 ]; then
   cp -a app/build/outputs/androidTest-results/connected emulator-review/d4-targeted-results

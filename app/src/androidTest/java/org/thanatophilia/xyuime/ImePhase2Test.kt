@@ -154,7 +154,9 @@ class ImePhase2Test {
         repeat(3) { description("空格") }
         key("Y"); key("e"); key("s")
         expectText("Hi to。No。   Yes")
-        description("符号键盘"); key("!"); description("返回字母键盘")
+        description("符号键盘")
+        node(By.desc("叹号")).click() // D5 symbol grid: the Chinese group's ！ (full-width)
+        description("返回字母键盘")
         description("空格")
         key("O"); key("k")
         expectText("Hi to。No。   Yes! Ok")

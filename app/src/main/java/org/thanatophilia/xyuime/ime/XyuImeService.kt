@@ -286,6 +286,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             hasSelection = selectionStart >= 0 && selectionStart != selectionEnd,
             comma = if (ascii) "," else "，",
             period = if (ascii) "." else "。",
+            symbolAscii = ascii,
             inputHint = if (EditorPolicy.isPassword(type)) "密码" else when (kind.name) {
                 "Email" -> "邮箱"; "Url" -> "网址"; "Phone" -> "电话"
                 "Integer", "SignedInteger" -> "数字"; "Decimal", "SignedDecimal" -> "小数"
@@ -311,6 +312,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             page = if (EditorPolicy.prefersNumbers(info?.inputType ?: currentInputEditorInfo?.inputType ?: 0)) KeyboardPage.Numbers else KeyboardPage.Letters,
             editing = false,
             selecting = false,
+            symbolAscii = EditorPolicy.asciiPunctuation(info?.inputType ?: currentInputEditorInfo?.inputType ?: 0),
         )
         configureChinese(info ?: currentInputEditorInfo)
         inputViewActive = true

@@ -166,7 +166,9 @@ class ImePhase3InputRegressionTest {
 
     @Test fun standaloneApostropheCommitsLiteralWithoutCandidates() = withChineseEditor {
         tap("key:符号键盘")
-        tap("key:'")
+        tap("symbol_tab:en")
+        requireNotNull(device.waitForFreshObject(By.desc("单引号"), 5_000)).click()
+        device.waitForIdle()
         awaitSnapshot("Standalone apostrophe must survive as literal text") {
             it.text == "'" && it.composing == null && it.actions.isEmpty()
         }
@@ -188,7 +190,9 @@ class ImePhase3InputRegressionTest {
         // Exercise the actual visible route to apostrophe, including page transitions.
         // This intentionally catches a page switch prematurely committing xi.
         tap("key:符号键盘")
-        tap("key:'")
+        tap("symbol_tab:en")
+        requireNotNull(device.waitForFreshObject(By.desc("单引号"), 5_000)).click()
+        device.waitForIdle()
         tap("key:返回字母键盘")
         typeLetters("an")
         awaitSnapshot("xi'an must remain one composition, not committed xi plus composing an") {

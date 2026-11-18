@@ -1,0 +1,248 @@
+package org.thanatophilia.xyuime
+
+import android.app.Activity
+import android.content.Intent
+import android.os.SystemClock
+import android.text.InputType
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiObject2
+import androidx.test.uiautomator.Until
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * D5: the real symbol page in the running IME. Tabs on top, vertical grid with horizontal
+ * group swipes, one-cell delete floating on the bottom-right, and the bottom row's first
+ * key reading ABC while the page is open.
+ */
+@RunWith(AndroidJUnit4::class)
+class ImePhase7SymbolInputTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val context = instrumentation.targetContext
+    private val device = UiDevice.getInstance(instrumentation)
+    private val pkg = context.packageName
+    private val imeId = "$pkg/org.thanatophilia.xyuime.ime.XyuImeService"
+
+    private data class Snapshot(val text: String, val composing: String?, val actions: List<Int>)
+
+    private fun freshTree() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.clearCache()
+        device.waitForIdle()
+    }
+
+    private fun node(tag: String): UiObject2 {
+        freshTree()
+        return requireNotNull(device.waitForFreshObject(By.res(tag).pkg(pkg), 10_000)) { tag }
+    }
+
+    private fun tap(tag: String) { node(tag).click(); device.waitForIdle() }
+    private fun typeLetters(text: String) { text.forEach { tap("key:$it") } }
+
+    private fun tapDescription(description: String) {
+        freshTree()
+        val target = device.waitForFreshObject(By.desc(description).pkg(pkg), 5_000)
+        requireNotNull(target) { "Missing description: $description" }.click()
+        device.waitForIdle()
+    }
+
+    private fun restoreIme(previous: String, hardware: String) {
+        if (previous.isNotEmpty() && previous != "null" && previous.contains('/')) {
+            device.executeShellCommand("ime set $previous")
+        }
+        if (hardware == "null" || hardware.isEmpty()) {
+            device.executeShellCommand("settings delete secure show_ime_with_hard_keyboard")
+        } else {
+            device.executeShellCommand("settings put secure show_ime_with_hard_keyboard $hardware")
+        }
+    }
+
+    private fun awaitHeader(pattern: String, timeoutMs: Long = 120_000) {
+        assertNotNull("Header must match $pattern",
+            device.waitForFreshObject(By.text(java.util.regex.Pattern.compile(pattern)).pkg(pkg), timeoutMs))
+    }
+
+    private fun awaitSnapshot(snapshot: () -> Snapshot, message: String, predicate: (Snapshot) -> Boolean): Snapshot {
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        var current = snapshot()
+        while (!predicate(current) && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(50)
+            current = snapshot()
+        }
+        assertTrue("$message; actual=$current", predicate(current))
+        return current
+    }
+
+    /** Real engine inside a synthetic editor; the recorder collects editor actions. */
+    private fun withSyntheticEditor(test: (Activity, EditText, () -> Snapshot) -> Unit) {
+        val previous = device.executeShellCommand("settings get secure default_input_method").trim()
+        val hardware = device.executeShellCommand("settings get secure show_ime_with_hard_keyboard").trim()
+        val received = mutableListOf<Int>()
+        var activity: Activity? = null
+        var field: EditText? = null
+        fun snapshot(): Snapshot {
+            var result: Snapshot? = null
+            instrumentation.runOnMainSync {
+                val editor = requireNotNull(field)
+                val text = editor.text
+                val start = BaseInputConnection.getComposingSpanStart(text)
+                val end = BaseInputConnection.getComposingSpanEnd(text)
+                result = Snapshot(text.toString(), if (start >= 0 && end >= start) text.subSequence(start, end).toString() else null, received.toList())
+            }
+            return requireNotNull(result)
+        }
+        try {
+            device.executeShellCommand("ime enable $imeId")
+            device.executeShellCommand("ime set $imeId")
+            device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+            val host = instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            activity = host
+            instrumentation.runOnMainSync {
+                received.clear()
+                val editor = EditText(host).apply {
+                    inputType = InputType.TYPE_CLASS_TEXT
+                    setSingleLine(true)
+                    imeOptions = EditorInfo.IME_ACTION_DONE
+                    setOnEditorActionListener { _, actionId, _ -> received.add(actionId); true }
+                }
+                field = editor
+                host.setContentView(editor)
+                editor.requestFocus()
+            }
+            requireNotNull(device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(pkg)), 8_000)).click()
+            instrumentation.runOnMainSync {
+                host.getSystemService(InputMethodManager::class.java)
+                    .showSoftInput(requireNotNull(field), InputMethodManager.SHOW_IMPLICIT)
+            }
+            awaitHeader("絮雨 · (English|中文拼音)")
+            if (!device.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg))) {
+                tap("key:切换语言，长按切换输入法")
+            }
+            awaitHeader("絮雨 · 中文拼音", 15_000)
+            test(host, requireNotNull(field), ::snapshot)
+        } finally {
+            activity?.let { a -> instrumentation.runOnMainSync { a.finish() } }
+            restoreIme(previous, hardware)
+        }
+    }
+
+    /** Special fixture editor (email): waits for its field header. */
+    private fun withEmailFixture(test: (Activity, EditText) -> Unit) {
+        val previous = device.executeShellCommand("settings get secure default_input_method").trim()
+        val hardware = device.executeShellCommand("settings get secure show_ime_with_hard_keyboard").trim()
+        var activity: Activity? = null
+        try {
+            device.executeShellCommand("ime enable $imeId")
+            device.executeShellCommand("ime set $imeId")
+            device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+            val host = instrumentation.startActivitySync(EditorFixtureActivity.intent(context, EditorFixtureActivity.FIXTURE_EMAIL)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            activity = host
+            requireNotNull(device.waitForFreshObject(By.desc("Email").pkg(pkg), 8_000)).click()
+            device.waitForIdle()
+            instrumentation.runOnMainSync {
+                host.findViewById<EditText>(R.id.fixture_email_editor).let {
+                    host.getSystemService(InputMethodManager::class.java).showSoftInput(it, InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
+            awaitHeader("絮雨 · 邮箱")
+            test(host, host.findViewById(R.id.fixture_email_editor))
+        } finally {
+            activity?.let { a -> instrumentation.runOnMainSync { a.finish() } }
+            restoreIme(previous, hardware)
+        }
+    }
+
+    private fun fieldText(host: Activity, viewId: Int): String {
+        var text = ""
+        instrumentation.runOnMainSync { text = host.findViewById<EditText>(viewId).text.toString() }
+        return text
+    }
+
+    private fun assertGroupSelected(tab: String) {
+        freshTree()
+        val tabNode = device.waitForFreshObject(By.res(tab).pkg(pkg), 5_000)
+        requireNotNull(tabNode) { "Missing tab $tab" }
+        assertTrue("$tab must be selected", tabNode.isSelected)
+    }
+
+    @Test fun chineseGroupInsertsPunctuationAndReturnsToLetters() = withSyntheticEditor { host, editor, snapshot ->
+        tap("key:符号键盘")
+        node("symbol_tab:cn")
+        assertGroupSelected("symbol_tab:cn")
+        tapDescription("顿号")
+        tapDescription("书名号左")
+        tapDescription("省略号")
+        awaitSnapshot(snapshot, "Chinese punctuation must land textually") {
+            it.text == "、《…" && it.composing == null
+        }
+        // The first bottom key is ABC on the symbol page and returns to letters.
+        assertEquals("ABC", node("key:返回字母键盘").text)
+        tap("key:返回字母键盘")
+        node("key:q")
+        typeLetters("an")
+        awaitSnapshot(snapshot, "Letters keep working after the symbol page") {
+            it.composing?.replace(" ", "") == "an"
+        }
+    }
+
+    @Test fun swipeSwitchesGroupsAndMathCharacterCommits() = withSyntheticEditor { host, editor, snapshot ->
+        tap("key:符号键盘")
+        node("symbol_tab:cn")
+        val grid = node("symbol_grid").visibleBounds
+        device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
+        device.waitForIdle()
+        assertGroupSelected("symbol_tab:en")
+        tapDescription("半角问号")
+        device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
+        device.waitForIdle()
+        assertGroupSelected("symbol_tab:math")
+        tapDescription("乘")
+        awaitSnapshot(snapshot, "Swipe-selected groups must insert their exact characters") {
+            it.text == "?×" && it.composing == null
+        }
+    }
+
+    @Test fun compositionPlusSymbolCommitsRawFirst() = withSyntheticEditor { host, editor, snapshot ->
+        typeLetters("nihao")
+        awaitSnapshot(snapshot, "Composition must be active") { it.composing?.replace(" ", "") == "nihao" }
+        tap("key:符号键盘")
+        tapDescription("叹号")
+        awaitSnapshot(snapshot, "Symbol insertion must commit the raw code first, then the mark") {
+            it.text == "nihao！" && it.composing == null && it.actions.isEmpty()
+        }
+        tap("key:返回字母键盘")
+        node("key:q")
+    }
+
+    @Test fun emailEditorDefaultsToEnglishGroupAndNormalizesFullWidth() = withEmailFixture { host, editor ->
+        tap("key:符号键盘")
+        assertGroupSelected("symbol_tab:en")
+        tapDescription("半角问号")
+        assertEquals("?", fieldText(host, R.id.fixture_email_editor))
+        // Manually browsing back to Chinese punctuation must still reach an email-safe string.
+        tap("symbol_tab:cn")
+        device.waitForIdle()
+        tapDescription("顿号")
+        assertEquals("?,", fieldText(host, R.id.fixture_email_editor))
+    }
+
+    @Test fun floatingDeleteRemovesOneCharacter() = withSyntheticEditor { host, editor, snapshot ->
+        instrumentation.runOnMainSync { editor.setText("abc") }
+        tap("key:符号键盘")
+        node("symbol_tab:cn")
+        // One grid cell: deletes exactly one character per tap.
+        tap("key:删除，长按连续删除")
+        awaitSnapshot(snapshot, "Floating delete must remove exactly one character") { it.text == "ab" }
+        tap("key:删除，长按连续删除")
+        awaitSnapshot(snapshot, "Second tap deletes one more") { it.text == "a" }
+    }
+}

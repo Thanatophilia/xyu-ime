@@ -51,6 +51,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -60,6 +61,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import kotlin.math.roundToInt
@@ -140,6 +142,8 @@ data class KeyboardUiState(
     val comma: String = "，",
     val period: String = "。",
     val numberKind: String = "number",
+    /** ASCII-only editor: the symbol page opens on the English group instead of Chinese punctuation. */
+    val symbolAscii: Boolean = false,
     val chinese: Boolean = false,
     val preedit: String = "",
     val candidates: List<String> = emptyList(),
@@ -195,6 +199,8 @@ sealed interface KeyboardAction {
 enum class CursorDirection { Left, Right, Up, Down, Home, End }
 
 private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
+/** D5 symbol grid: eight columns, matching the letter rows' rhythm. */
+private const val SYMBOL_COLUMNS = 8
 
 
 private val XyuLightColors = lightColorScheme(
@@ -231,9 +237,6 @@ private val LETTER_ROW_THREE = listOf("z", "x", "c", "v", "b", "n", "m")
 private val NUMBER_ROW_ONE = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
 private val NUMBER_ROW_TWO = listOf("-", "+", "×", "÷", "=", "(", ")", "/", "%")
 private val NUMBER_ROW_THREE = listOf(",", ".", "(", ")", "%")
-private val SYMBOL_ROW_ONE = listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")")
-private val SYMBOL_ROW_TWO = listOf("-", "_", "+", "=", "{", "}", "[", "]", "|", "\\")
-private val SYMBOL_ROW_THREE = listOf(";", ":", "'", "\"", "?")
 
 /**
  * Compose-only view for 絮雨. The host supplies state and handles all resulting actions.
@@ -337,6 +340,11 @@ private fun KeyboardSurface(
     val syllableScroll = remember(state.candidateRevision) { LazyListState() }
     var selectedSyllable by remember(state.candidateRevision) { mutableStateOf<String?>(null) }
     var wordFilter by remember(state.candidateRevision) { mutableStateOf(CandidateWordFilter.All) }
+    // D5 symbol page group: ASCII editors open on the English group; switching editors
+    // resets to that editor's default. In-page swipes/taps only change this UI state.
+    var symbolGroup by remember(state.symbolAscii) {
+        mutableStateOf(SymbolLayout.initialGroup(state.symbolAscii))
+    }
     var syllableSelectionRequest by remember(state.candidateRevision) { mutableStateOf(0L) }
     LaunchedEffect(selectedSyllable, wordFilter, drawerScroll, syllableSelectionRequest, drawerStart) {
         drawerScroll.scrollToItem(0)
@@ -424,7 +432,9 @@ private fun KeyboardSurface(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                KeyboardPage.Symbols -> SymbolsPanel(
+                KeyboardPage.Symbols -> SymbolsPagePanel(
+                    group = symbolGroup,
+                    onSelectGroup = { symbolGroup = it },
                     onAction = onAction,
                     fontScale = fontScale,
                     compactLandscape = compactLandscape,
@@ -831,11 +841,128 @@ private fun NumbersPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> U
         modifier, KeyboardAction.ToggleNumbers)
 }
 
+/**
+ * D5 symbol page: category tabs on top, a vertically scrollable grid that switches groups
+ * on horizontal swipes, and a one-cell delete key floating on the grid's bottom-right corner.
+ * Only this panel changes: the keyboard frame, info strip and bottom row are untouched.
+ */
 @Composable
-private fun SymbolsPanel(onAction: (KeyboardAction) -> Unit, fontScale: Float, compactLandscape: Boolean,
-    keyShape: Shape, rowGap: Dp, modifier: Modifier) {
-    AuxiliaryPanel(SYMBOL_ROW_ONE, SYMBOL_ROW_TWO, SYMBOL_ROW_THREE, onAction, fontScale, keyShape, rowGap,
-        modifier, KeyboardAction.ToggleSymbols)
+private fun SymbolsPagePanel(
+    group: SymbolGroup,
+    onSelectGroup: (SymbolGroup) -> Unit,
+    onAction: (KeyboardAction) -> Unit,
+    fontScale: Float,
+    compactLandscape: Boolean,
+    keyShape: Shape,
+    rowGap: Dp,
+    modifier: Modifier,
+) {
+    val items = SymbolLayout.items(group)
+    val tabHeight = if (compactLandscape) 30.dp else 34.dp
+    val keyHeight = if (compactLandscape) 40.dp else 43.dp
+    val gap = KeyboardGeometry.KEY_GAP_DP.dp
+    val gridState = remember(group) { LazyGridState() }
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().height(tabHeight),
+            horizontalArrangement = Arrangement.spacedBy(gap)) {
+            SymbolLayout.groups.forEach { candidate ->
+                val isSelected = candidate == group
+                Box(Modifier.weight(1f).fillMaxHeight().clip(keyShape)
+                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surface)
+                    .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f), keyShape)
+                    .clickable { onSelectGroup(candidate) }
+                    .clearAndSetSemantics {
+                        testTagsAsResourceId = true
+                        testTag = "symbol_tab:${candidate.key}"
+                        selected = isSelected
+                        role = Role.Tab
+                        contentDescription = candidate.title
+                        stateDescription = if (isSelected) "当前" else "未选中"
+                        onClick { onSelectGroup(candidate); true }
+                    },
+                    contentAlignment = Alignment.Center) {
+                    Text(candidate.title, fontSize = adaptiveSp(12f, fontScale, 15f),
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Clip)
+                }
+            }
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).padding(top = rowGap)) {
+            val cellWidth = (maxWidth - gap * (SYMBOL_COLUMNS - 1)) / SYMBOL_COLUMNS
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(SYMBOL_COLUMNS),
+                state = gridState,
+                modifier = Modifier.fillMaxSize()
+                    .semantics { testTagsAsResourceId = true; testTag = "symbol_grid" }
+                    .pointerInput(group) {
+                        // Horizontal swipes switch group; vertical drags stay with the grid.
+                        // The direction is decided once per gesture from the dominant axis.
+                        val threshold = 48.dp.toPx()
+                        val slop = viewConfiguration.touchSlop
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var totalX = 0f
+                            var totalY = 0f
+                            var horizontal: Boolean? = null
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                totalX += change.positionChange().x
+                                totalY += change.positionChange().y
+                                if (horizontal == null && (abs(totalX) > slop || abs(totalY) > slop)) {
+                                    horizontal = abs(totalX) > abs(totalY)
+                                }
+                                if (horizontal == true) change.consume()
+                            }
+                            if (horizontal == true && abs(totalX) > threshold) {
+                                onSelectGroup(SymbolLayout.next(group, forward = totalX < 0))
+                            }
+                        }
+                    },
+                contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
+                verticalArrangement = Arrangement.spacedBy(gap),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                itemsIndexed(items) { index, item ->
+                    SymbolGridKey(item, group, index, keyHeight, keyShape, fontScale, onAction)
+                }
+            }
+            // Exactly one cell: floats on the grid's bottom-right and covers one symbol.
+            DeleteKey(onAction, fontScale, keyShape,
+                Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight))
+        }
+    }
+}
+
+@Composable
+private fun SymbolGridKey(item: SymbolItem, group: SymbolGroup, index: Int, height: Dp,
+    shape: Shape, fontScale: Float, onAction: (KeyboardAction) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Box(Modifier.fillMaxWidth().height(height).clip(shape)
+        .background(if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White)
+        .border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
+        .clickable { onAction(KeyboardAction.Text(item.text)) }
+        .clearAndSetSemantics {
+            testTagsAsResourceId = true
+            testTag = "symbol:${group.key}:$index"
+            contentDescription = item.name
+            text = AnnotatedString(item.text)
+            role = Role.Button
+            onClick { onAction(KeyboardAction.Text(item.text)); true }
+        },
+        contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(item.text, color = colors.onSurface,
+                fontSize = adaptiveSp(19f, fontScale, 22f),
+                maxLines = 1, overflow = TextOverflow.Clip)
+            Text(item.name, color = colors.onSurfaceVariant, fontSize = 8.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable
@@ -863,8 +990,13 @@ private fun BottomBar(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit
     BoxWithConstraints(modifier) {
     val sideKeyWidth = KeyboardGeometry.edgeKeyWidthDp(maxWidth.value).dp
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(KeyboardGeometry.KEY_GAP_DP.dp)) {
-        KeyFace("！﹫#", "符号键盘", fontScale, keyShape, Modifier.width(sideKeyWidth).fillMaxHeight(),
-            active = state.page == KeyboardPage.Symbols, small = true, onClick = { onAction(KeyboardAction.ToggleSymbols) })
+        // The first key doubles as the symbol-page entry and its way back: on the symbol
+        // page it reads ABC and returns to letters; elsewhere it reads ！﹫# and opens symbols.
+        val symbolsPage = state.page == KeyboardPage.Symbols
+        KeyFace(if (symbolsPage) "ABC" else "！﹫#", if (symbolsPage) "返回字母键盘" else "符号键盘",
+            fontScale, keyShape, Modifier.width(sideKeyWidth).fillMaxHeight(),
+            active = symbolsPage, small = true,
+            onClick = { onAction(KeyboardAction.ToggleSymbols) })
         KeyFace("123", "数字键盘", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
             active = state.page == KeyboardPage.Numbers, small = true, onClick = { onAction(KeyboardAction.ToggleNumbers) })
         KeyFace(state.comma, "逗号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),

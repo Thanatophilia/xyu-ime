@@ -23,7 +23,7 @@ class EditorFixtureActivity : ComponentActivity() {
             when (fixture) {
                 FIXTURE_WEB, FIXTURE_WEB_EDITABLE -> webLayout(fixture == FIXTURE_WEB_EDITABLE)
                 FIXTURE_SWITCH -> switchLayout()
-                FIXTURE_PASSWORD, FIXTURE_NUMBER -> specialLayout(fixture)
+                FIXTURE_PASSWORD, FIXTURE_NUMBER, FIXTURE_EMAIL -> specialLayout(fixture)
                 else -> nativeLayout(if (fixture == FIXTURE_MULTILINE) android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE else android.text.InputType.TYPE_CLASS_TEXT)
             }
         )
@@ -34,23 +34,38 @@ class EditorFixtureActivity : ComponentActivity() {
         val padding = (24 * resources.displayMetrics.density).toInt()
         setPadding(padding, padding, padding, padding)
         val password = fixture == FIXTURE_PASSWORD
+        val email = fixture == FIXTURE_EMAIL
         val label = TextView(this@EditorFixtureActivity).apply {
             id = R.id.fixture_action_label
             text = "action:none"
         }
-        addView(TextView(this@EditorFixtureActivity).apply { text = if (password) "Password field" else "Number field" })
+        addView(TextView(this@EditorFixtureActivity).apply {
+            text = when {
+                password -> "Password field"
+                email -> "Email field"
+                else -> "Number field"
+            }
+        })
         addView(EditText(this@EditorFixtureActivity).apply {
-            id = if (password) R.id.fixture_password_editor else R.id.fixture_number_editor
-            hint = if (password) "Password" else "Number"
+            id = when {
+                password -> R.id.fixture_password_editor
+                email -> R.id.fixture_email_editor
+                else -> R.id.fixture_number_editor
+            }
+            hint = when {
+                password -> "Password"
+                email -> "Email"
+                else -> "Number"
+            }
             contentDescription = hint
-            inputType = if (password) {
-                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            } else {
-                android.text.InputType.TYPE_CLASS_NUMBER
+            inputType = when {
+                password -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                email -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                else -> android.text.InputType.TYPE_CLASS_NUMBER
             }
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
             setSingleLine(true)
-            if (!password) {
+            if (!password && !email) {
                 setOnEditorActionListener { _, actionId, _ ->
                     label.text = "action:$actionId"
                     true
@@ -117,6 +132,7 @@ class EditorFixtureActivity : ComponentActivity() {
         const val FIXTURE_SWITCH = "switch"
         const val FIXTURE_PASSWORD = "password"
         const val FIXTURE_NUMBER = "number"
+        const val FIXTURE_EMAIL = "email"
         const val ACTION_FIXTURE = "org.thanatophilia.xyuime.DEBUG_EDITOR_FIXTURE"
         fun intent(context: Context, fixture: String) = Intent(context, EditorFixtureActivity::class.java).putExtra(EXTRA_FIXTURE, fixture)
     }
