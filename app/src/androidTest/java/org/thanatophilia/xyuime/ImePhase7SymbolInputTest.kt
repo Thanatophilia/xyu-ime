@@ -200,6 +200,8 @@ class ImePhase7SymbolInputTest {
         tap("key:符号键盘")
         node("symbol_tab:cn")
         assertGroupSelected("symbol_tab:cn")
+        assertNotNull("Group dots must appear in the info strip",
+            device.waitForFreshObject(By.text("● ○ ○ 1/3").pkg(pkg), 3_000))
         tapDescription("顿号")
         tapDescription("书名号左")
         tapDescription("方头括号左")
@@ -271,61 +273,34 @@ class ImePhase7SymbolInputTest {
         assertEquals("?,", fieldText(host, R.id.fixture_email_editor))
     }
 
-    @Test fun floatingDeleteRemovesOneCharacter() = withSyntheticEditor { host, editor, snapshot ->
+    @Test fun floatingDeleteRemovesExactlyOneCharacterPerTap() = withSyntheticEditor { host, editor, snapshot ->
         instrumentation.runOnMainSync {
             editor.setText("abc")
-            // setText leaves the caret at the start; a real user types at the end.
+            // setText leaves the caret at the start; place it where normal typing leaves it.
             editor.setSelection(editor.text.length)
         }
         tap("key:符号键盘")
         node("symbol_tab:cn")
-        // The symbol page lays out in a couple of frames; settle before tapping the overlay.
-        SystemClock.sleep(400)
-        val first = tapDelete(snapshot, "ab")
-        val second = tapDelete(snapshot, "a")
-        assertTrue("One character per tap; first=$first second=$second", true)
+        SystemClock.sleep(400) // wait for the symbol grid and floating key to settle
+        tap("key:删除")
+        awaitSnapshot(snapshot, "One physical tap must delete one character") { it.text == "ab" }
+        tap("key:删除")
+        awaitSnapshot(snapshot, "The second physical tap deletes one more") { it.text == "a" }
     }
 
-    /** Tries the plain UiObject2 click, then a device-level click, then a shell tap. */
-    private fun tapDelete(snapshot: () -> Snapshot, expected: String): String {
-        val attempts = mutableListOf<String>()
-        repeat(2) {
-            freshTree()
-            val target = device.waitForFreshObject(By.res("key:删除").pkg(pkg), 5_000)
-            requireNotNull(target) { "Missing floating delete" }
-            val bounds = target.visibleBounds
-            val methods = listOf<Pair<String, () -> Unit>>(
-                "UiObject2.click" to { target.click() },
-                "UiDevice.click" to { device.click(bounds.centerX(), bounds.centerY()) },
-                "shell tap" to {
-                    device.executeShellCommand("input tap ${bounds.centerX()} ${bounds.centerY()}")
-                },
-            )
-            methods.forEach { (name, action) ->
-                try {
-                    action()
-                } catch (_: androidx.test.uiautomator.StaleObjectException) {
-                    attempts.add("$name:stale")
-                    return@forEach
-                }
-                device.waitForIdle()
-                val deadline = SystemClock.uptimeMillis() + 1_500
-                while (SystemClock.uptimeMillis() < deadline) {
-                    if (snapshot().text == expected) {
-                        attempts.add("$name:ok")
-                        return "$name ok after $attempts"
-                    }
-                    SystemClock.sleep(50)
-                }
-                attempts.add("$name:no-effect(text=${snapshot().text})")
-            }
+    @Test fun floatingDeleteLongPressRepeatsAndStopsOnRelease() = withSyntheticEditor { host, editor, snapshot ->
+        instrumentation.runOnMainSync {
+            editor.setText("abcdef")
+            editor.setSelection(editor.text.length)
         }
-        val deleteBounds = device.findObject(By.res("key:删除").pkg(pkg))?.visibleBounds
-        val gridBounds = device.findObject(By.res("symbol_grid").pkg(pkg))?.visibleBounds
-        val firstKey = device.findObject(By.res("key:返回字母键盘").pkg(pkg))?.visibleBounds
-        val logtail = device.executeShellCommand("logcat -d -t 120 -s XyuState:D").trim()
-        fail("Floating delete never reached '$expected'; attempts=$attempts " +
-            "delete=$deleteBounds grid=$gridBounds firstKey=$firstKey log=$logtail")
-        return "failed"
+        tap("key:符号键盘")
+        node("symbol_tab:cn")
+        SystemClock.sleep(400)
+        node("key:删除").longClick()
+        val afterHold = snapshot()
+        assertTrue("Long press should delete multiple characters; actual=$afterHold", afterHold.text.length <= 4)
+        SystemClock.sleep(400)
+        assertEquals("Repeat must stop promptly after release", afterHold.text, snapshot().text)
     }
+
 }

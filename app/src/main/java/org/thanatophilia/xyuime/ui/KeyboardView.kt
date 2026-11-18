@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -381,6 +382,7 @@ private fun KeyboardSurface(
             onAction = onAction,
             fontScale = fontScale,
             compactLandscape = compactLandscape,
+            symbolGroup = if (state.page == KeyboardPage.Symbols) symbolGroup else null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(stripHeight),
@@ -743,6 +745,7 @@ private fun InfoStrip(
     onAction: (KeyboardAction) -> Unit,
     fontScale: Float,
     compactLandscape: Boolean,
+    symbolGroup: SymbolGroup? = null,
     modifier: Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -757,13 +760,29 @@ private fun InfoStrip(
     ) {
         Text(
             text = if (state.selecting) "絮雨 · 选择文字" else "絮雨 · ${state.inputHint}",
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f, fill = false),
             color = colors.onSurfaceVariant,
             fontSize = adaptiveSp(12f, fontScale, 15f),
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Clip,
         )
+        if (symbolGroup != null) {
+            val index = SymbolLayout.groups.indexOf(symbolGroup)
+            Text(
+                text = SymbolLayout.groups.indices.joinToString(" ") { if (it == index) "●" else "○" } + " ${index + 1}/3",
+                modifier = Modifier.padding(horizontal = 8.dp).semantics {
+                    testTagsAsResourceId = true
+                    testTag = "symbol_group_indicator"
+                    contentDescription = "符号分组 ${symbolGroup.title}，第 ${index + 1} 组，共 3 组"
+                    stateDescription = "${index + 1}/3"
+                },
+                color = colors.primary,
+                fontSize = adaptiveSp(10f, fontScale, 12f),
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.weight(1f))
         Box(Modifier.fillMaxHeight().size(width = 62.dp, height = if (compactLandscape) 23.dp else 28.dp)
             .background(if (state.editing) colors.primaryContainer else Color.Transparent, shape)
             .pointerInput(state.editing) { detectTapGestures(onTap = { onAction(KeyboardAction.ToggleEditing) }) }
@@ -932,59 +951,13 @@ private fun SymbolsPagePanel(
                     SymbolGridKey(item, group, index, keyHeight, keyShape, fontScale, onAction)
                 }
             }
-            // Exactly one cell: floats on the grid's bottom-right and covers one symbol.
-            // Two layers: the visible key (semantics for accessibility) plus a touch layer
-            // on top that owns the physical tap, mirroring how grid cells receive taps.
-            SymbolDeleteKey(onAction, keyShape,
-                Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight).zIndex(1f))
-            val density = LocalDensity.current
-            val cellWidthPx = with(density) { cellWidth.toPx() }
-            val keyHeightPx = with(density) { keyHeight.toPx() }
-            Box(Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight)
-                .zIndex(2f)
-                .pointerInput(group, cellWidthPx, keyHeightPx) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        var cancelled = false
-                        var released = false
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) {
-                                released = true
-                                change.consume()
-                                break
-                            }
-                            if (change.isConsumed ||
-                                change.positionChange().getDistance() > viewConfiguration.touchSlop) {
-                                cancelled = true
-                            }
-                            change.consume()
-                        }
-                        if (released && !cancelled) onAction(KeyboardAction.Backspace)
-                    }
-                })
+            // One ordinary-looking cell above the grid. One input path owns both the
+            // initial press and repeat cancellation; accessibility invokes the same action.
+            KeyFace("", "删除，长按连续删除", fontScale, keyShape,
+                Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight).zIndex(1f),
+                repeat = true, customTag = "key:删除", icon = "delete", plainSurface = true,
+                onClick = { onAction(KeyboardAction.Backspace) })
         }
-    }
-}
-
-@Composable
-private fun SymbolDeleteKey(onAction: (KeyboardAction) -> Unit, shape: Shape, modifier: Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Box(modifier.zIndex(1f).clip(shape)
-        .background(if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White)
-        .border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
-        .clickable { onAction(KeyboardAction.Backspace) }
-        .clearAndSetSemantics {
-            testTagsAsResourceId = true
-            testTag = "key:删除"
-            contentDescription = "删除"
-            role = Role.Button
-            onClick { onAction(KeyboardAction.Backspace); true }
-        },
-        contentAlignment = Alignment.Center) {
-        KeyIcon("delete", colors.onSurface, locked = false, Modifier.size(22.dp).clearAndSetSemantics {})
     }
 }
 
@@ -1111,7 +1084,8 @@ private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shap
 private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
     modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false, enabled: Boolean = true,
     onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false,
-    customTag: String? = null, spokenState: String? = null, longClickLabel: String = "长按") {
+    customTag: String? = null, spokenState: String? = null, longClickLabel: String = "长按",
+    plainSurface: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     val view = LocalView.current
     val configuration = LocalViewConfiguration.current
@@ -1122,7 +1096,7 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
     val background = when {
         pressed -> colors.primary.copy(alpha = 0.24f)
         active -> colors.primaryContainer
-        small || icon != null -> colors.surfaceVariant
+        small || (icon != null && !plainSurface) -> colors.surfaceVariant
         else -> if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White
     }
     val foreground = (if (active) colors.onPrimaryContainer else colors.onSurface).copy(alpha = if (enabled) 1f else 0.35f)

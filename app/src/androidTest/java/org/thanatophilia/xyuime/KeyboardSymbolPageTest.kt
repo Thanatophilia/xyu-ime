@@ -30,6 +30,10 @@ class KeyboardSymbolPageTest {
         setKeyboard(ascii = false, actions = mutableListOf())
         rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
         rule.onNodeWithTag("symbol_tab:cn").assertContentDescriptionEquals("中文标点")
+        rule.onNodeWithText("● ○ ○ 1/3").assertExists()
+        rule.onNodeWithTag("symbol_group_indicator")
+            .assertContentDescriptionEquals("符号分组 中文标点，第 1 组，共 3 组")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1/3"))
         // The first three grid rows (24 cells) are fully visible: three complete rows.
         val grid = rule.onNodeWithTag("symbol_grid").fetchSemanticsNode().boundsInRoot
         val tolerance = 2f
