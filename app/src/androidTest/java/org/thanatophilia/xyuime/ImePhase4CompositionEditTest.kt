@@ -2,6 +2,8 @@ package org.thanatophilia.xyuime
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
 import android.view.inputmethod.BaseInputConnection
