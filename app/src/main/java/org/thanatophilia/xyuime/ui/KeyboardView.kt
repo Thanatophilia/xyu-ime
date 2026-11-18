@@ -356,7 +356,11 @@ private fun KeyboardSurface(
     ) {
         if (state.preedit.isNotEmpty()) CandidateStrip(state, onAction, stripScroll,
             Modifier.fillMaxWidth().height(stripHeight).onSizeChanged { stripWidthPx = it.width },
-            onToggle = { if (continuationStart != null) onAction(KeyboardAction.ToggleCandidates) }) else InfoStrip(
+            onToggle = {
+                if (org.thanatophilia.xyuime.BuildConfig.DEBUG) android.util.Log.d("XyuLayout",
+                    "toggle ready=${continuationStart != null} expanded=${state.candidatesExpanded} first=${stripScroll.firstVisibleItemIndex} offset=${stripScroll.firstVisibleItemScrollOffset} count=${stripScroll.layoutInfo.totalItemsCount}/${state.candidates.size} width=$stripWidthPx")
+                if (continuationStart != null) onAction(KeyboardAction.ToggleCandidates)
+            }) else InfoStrip(
             state = state,
             onAction = onAction,
             fontScale = fontScale,

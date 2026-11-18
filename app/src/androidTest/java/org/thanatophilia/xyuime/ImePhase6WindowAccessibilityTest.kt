@@ -73,7 +73,8 @@ class ImePhase6WindowAccessibilityTest {
         val base = java.io.File(context.getExternalFilesDir(null), name)
         device.dumpWindowHierarchy(java.io.File("${base.path}.xml"))
         device.takeScreenshot(java.io.File("${base.path}.png"))
-        listOf("xml", "png").forEach { extension ->
+        java.io.File("${base.path}.log").writeText(device.executeShellCommand("logcat -d -s XyuLayout:D XyuFloating:D XyuState:D"))
+        listOf("xml", "png", "log").forEach { extension ->
             device.executeShellCommand("cp ${base.path}.$extension /sdcard/Download/xyu-ime-review/$name.$extension")
         }
     }
