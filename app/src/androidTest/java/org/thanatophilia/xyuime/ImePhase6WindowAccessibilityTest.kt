@@ -130,9 +130,9 @@ class ImePhase6WindowAccessibilityTest {
             tap("key:切换语言，长按切换输入法")
             assertNotNull(device.waitForFreshObject(By.text("絮雨 · 中文拼音").pkg(pkg), 15_000))
             typeLetters("nihao")
-            val deadline = SystemClock.uptimeMillis() + 10_000
+            val candidateDeadline = SystemClock.uptimeMillis() + 10_000
             var candidateSeen = false
-            while (SystemClock.uptimeMillis() < deadline && !candidateSeen) {
+            while (SystemClock.uptimeMillis() < candidateDeadline && !candidateSeen) {
                 freshTree()
                 candidateSeen = device.hasObject(By.res("candidate_toggle").pkg(pkg))
                 if (!candidateSeen) SystemClock.sleep(100)
