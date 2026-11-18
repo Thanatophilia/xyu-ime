@@ -23,9 +23,41 @@ class EditorFixtureActivity : ComponentActivity() {
             when (fixture) {
                 FIXTURE_WEB -> webLayout()
                 FIXTURE_SWITCH -> switchLayout()
+                FIXTURE_PASSWORD, FIXTURE_NUMBER -> specialLayout(fixture)
                 else -> nativeLayout(if (fixture == FIXTURE_MULTILINE) android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE else android.text.InputType.TYPE_CLASS_TEXT)
             }
         )
+    }
+
+    private fun specialLayout(fixture: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        val padding = (24 * resources.displayMetrics.density).toInt()
+        setPadding(padding, padding, padding, padding)
+        val password = fixture == FIXTURE_PASSWORD
+        val label = TextView(this@EditorFixtureActivity).apply {
+            id = R.id.fixture_action_label
+            text = "action:none"
+        }
+        addView(TextView(this@EditorFixtureActivity).apply { text = if (password) "Password field" else "Number field" })
+        addView(EditText(this@EditorFixtureActivity).apply {
+            id = if (password) R.id.fixture_password_editor else R.id.fixture_number_editor
+            hint = if (password) "Password" else "Number"
+            contentDescription = hint
+            inputType = if (password) {
+                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            } else {
+                android.text.InputType.TYPE_CLASS_NUMBER
+            }
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+            setSingleLine(true)
+            if (!password) {
+                setOnEditorActionListener { _, actionId, _ ->
+                    label.text = "action:$actionId"
+                    true
+                }
+            }
+        })
+        addView(label)
     }
 
     private fun switchLayout(): LinearLayout = LinearLayout(this).apply {
@@ -75,6 +107,8 @@ class EditorFixtureActivity : ComponentActivity() {
         const val FIXTURE_MULTILINE = "multiline"
         const val FIXTURE_WEB = "web"
         const val FIXTURE_SWITCH = "switch"
+        const val FIXTURE_PASSWORD = "password"
+        const val FIXTURE_NUMBER = "number"
         const val ACTION_FIXTURE = "org.thanatophilia.xyuime.DEBUG_EDITOR_FIXTURE"
         fun intent(context: Context, fixture: String) = Intent(context, EditorFixtureActivity::class.java).putExtra(EXTRA_FIXTURE, fixture)
     }

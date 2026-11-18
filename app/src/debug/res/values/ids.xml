@@ -4,4 +4,7 @@
     <item name="fixture_editor_a" type="id" />
     <item name="fixture_editor_b" type="id" />
     <item name="fixture_web_view" type="id" />
+    <item name="fixture_password_editor" type="id" />
+    <item name="fixture_number_editor" type="id" />
+    <item name="fixture_action_label" type="id" />
 </resources>
