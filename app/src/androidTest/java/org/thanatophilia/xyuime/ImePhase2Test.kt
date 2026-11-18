@@ -155,7 +155,8 @@ class ImePhase2Test {
         key("Y"); key("e"); key("s")
         expectText("Hi to。No。   Yes")
         description("符号键盘")
-        node(By.desc("叹号")).click() // D5 symbol grid: the Chinese group's ！ (full-width)
+        node(By.res("symbol_tab:en")).click()
+        node(By.desc("叹号")).click() // The sentence-caps regression uses ASCII '!'.
         description("返回字母键盘")
         description("空格")
         key("O"); key("k")
