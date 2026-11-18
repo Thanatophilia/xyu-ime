@@ -209,10 +209,10 @@ class ImePhase5SpecialFieldInputTest {
 
     @Test fun shiftInsideCompositionKeepsComposition() = withChineseSyntheticEditor { host, editor, snapshot ->
         typeLetters("nihao")
-        awaitSnapshot(snapshot, "Composition must be active") { it.composing?.replace(" ", "") == "nihao" }
+        val before = awaitSnapshot(snapshot, "Composition must be active") { it.composing?.replace(" ", "") == "nihao" }
         tap("key:切换大小写，长按锁定大写")
-        awaitSnapshot(snapshot, "Shift must not commit, drop, or alter an active composition") {
-            it.composing?.replace(" ", "") == "nihao" && it.text.isEmpty()
+        awaitSnapshot(snapshot, "Shift must leave the composition snapshot completely unchanged") {
+            it == before
         }
         node("candidate:0")
         enterWith("完成")
