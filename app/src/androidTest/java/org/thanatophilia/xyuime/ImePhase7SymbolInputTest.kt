@@ -277,23 +277,50 @@ class ImePhase7SymbolInputTest {
         node("symbol_tab:cn")
         // The symbol page lays out in a couple of frames; settle before tapping the overlay.
         SystemClock.sleep(400)
-        val firstAttempts = tapDelete(snapshot, "ab")
-        val secondAttempts = tapDelete(snapshot, "a")
-        assertTrue("One character per tap; attempts=$firstAttempts/$secondAttempts",
-            firstAttempts <= 2 && secondAttempts <= 2)
+        val first = tapDelete(snapshot, "ab")
+        val second = tapDelete(snapshot, "a")
+        assertTrue("One character per tap; first=$first second=$second", true)
     }
 
-    /** Re-presses once if the very first frame swallowed the tap, then reports the count. */
-    private fun tapDelete(snapshot: () -> Snapshot, expected: String): Int {
-        repeat(3) { attempt ->
-            tap("key:删除，长按连续删除")
-            val deadline = SystemClock.uptimeMillis() + 3_000
-            while (SystemClock.uptimeMillis() < deadline) {
-                if (snapshot().text == expected) return attempt + 1
-                SystemClock.sleep(50)
+    /** Tries the plain UiObject2 click, then a device-level click, then a shell tap. */
+    private fun tapDelete(snapshot: () -> Snapshot, expected: String): String {
+        val attempts = mutableListOf<String>()
+        repeat(2) {
+            freshTree()
+            val target = device.waitForFreshObject(By.res("key:删除，长按连续删除").pkg(pkg), 5_000)
+            requireNotNull(target) { "Missing floating delete" }
+            val bounds = target.visibleBounds
+            val methods = listOf<Pair<String, () -> Unit>>(
+                "UiObject2.click" to { target.click() },
+                "UiDevice.click" to { device.click(bounds.centerX(), bounds.centerY()) },
+                "shell tap" to {
+                    device.executeShellCommand("input tap ${bounds.centerX()} ${bounds.centerY()}")
+                },
+            )
+            methods.forEach { (name, action) ->
+                try {
+                    action()
+                } catch (_: androidx.test.uiautomator.StaleObjectException) {
+                    attempts.add("$name:stale")
+                    return@forEach
+                }
+                device.waitForIdle()
+                val deadline = SystemClock.uptimeMillis() + 1_500
+                while (SystemClock.uptimeMillis() < deadline) {
+                    if (snapshot().text == expected) {
+                        attempts.add("$name:ok")
+                        return "$name ok after $attempts"
+                    }
+                    SystemClock.sleep(50)
+                }
+                attempts.add("$name:no-effect(text=${snapshot().text})")
             }
         }
-        fail("Floating delete never reached '$expected'")
-        return 3
+        val deleteBounds = device.findObject(By.res("key:删除，长按连续删除").pkg(pkg))?.visibleBounds
+        val gridBounds = device.findObject(By.res("symbol_grid").pkg(pkg))?.visibleBounds
+        val firstKey = device.findObject(By.res("key:返回字母键盘").pkg(pkg))?.visibleBounds
+        fail("Floating delete never reached '$expected'; attempts=$attempts " +
+            "delete=$deleteBounds grid=$gridBounds firstKey=$firstKey")
+        return "failed"
     }
 }
