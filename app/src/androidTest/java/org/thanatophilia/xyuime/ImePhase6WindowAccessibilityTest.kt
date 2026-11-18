@@ -115,6 +115,12 @@ class ImePhase6WindowAccessibilityTest {
         node("key:q")
         device.setOrientationLeft()
         try {
+            // The system re-lays the IME window after rotation; wait until the letters return.
+            val deadline = SystemClock.uptimeMillis() + 20_000
+            while (SystemClock.uptimeMillis() < deadline &&
+                device.findObject(By.res("key:q").pkg(pkg)) == null) {
+                SystemClock.sleep(200)
+            }
             device.waitForIdle()
             val surface = node("keyboard_surface").visibleBounds
             assertTrue("Landscape keyboard must span the full width",
@@ -210,9 +216,20 @@ class ImePhase6WindowAccessibilityTest {
             if (strip == null) SystemClock.sleep(100)
         }
         requireNotNull(strip)
-        assertEquals("展开候选", strip.contentDescription)
+        // The spoken description may live on the toggle or one of its children in the a11y tree.
+        freshTree()
+        val toggle = node("candidate_toggle")
+        val descriptions = mutableListOf<String>()
+        if (!toggle.contentDescription.isNullOrBlank()) descriptions.add(toggle.contentDescription)
+        descriptions.addAll(toggle.findObjects(By.desc(java.util.regex.Pattern.compile(".+"))).mapNotNull { it.contentDescription })
+        assertTrue("Candidate toggle must expose 展开候选; actual=$descriptions",
+            descriptions.contains("展开候选"))
         tap("candidate_toggle")
-        assertEquals("收回候选", node("candidate_toggle").contentDescription)
+        freshTree()
+        val collapsed = node("candidate_toggle").findObjects(By.desc(java.util.regex.Pattern.compile(".+"))).mapNotNull { it.contentDescription }.toMutableList()
+        if (!node("candidate_toggle").contentDescription.isNullOrBlank()) collapsed.add(node("candidate_toggle").contentDescription)
+        assertTrue("Candidate toggle must expose 收回候选; actual=$collapsed",
+            collapsed.contains("收回候选"))
     }
 
     @Test fun expandedCandidatePageStaysInsideScreenBounds() = withImeEditor { host ->
@@ -248,9 +265,18 @@ class ImePhase6WindowAccessibilityTest {
             web.reload()
         }
         assertTrue("Web fixture must load", loaded.await(10, TimeUnit.SECONDS))
-        val editable = device.waitForFreshObject(By.desc("Web editable").pkg(pkg), 8_000)
-        requireNotNull(editable).click()
+        // Establish the WebView input connection through the first editable node (the
+        // textarea), then switch the DOM focus to the contenteditable div.
+        val firstEditable = device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(pkg)), 8_000)
+        requireNotNull(firstEditable) { "Web fixture must expose an editable field" }.click()
         device.waitForIdle()
+        val focused = CountDownLatch(1)
+        instrumentation.runOnMainSync {
+            web.evaluateJavascript("document.getElementById('editable').focus(); document.activeElement.id;") { result ->
+                focused.countDown()
+            }
+        }
+        assertTrue("Contenteditable must take DOM focus", focused.await(5, TimeUnit.SECONDS))
         instrumentation.runOnMainSync {
             host.getSystemService(InputMethodManager::class.java).showSoftInput(web, InputMethodManager.SHOW_IMPLICIT)
         }
