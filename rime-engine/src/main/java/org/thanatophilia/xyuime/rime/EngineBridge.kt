@@ -6,8 +6,8 @@ package org.thanatophilia.xyuime.rime
  * stale-callback invalidation and editor switching without real deployment timing.
  */
 interface EngineBridge {
-    /** Queue one engine operation; [callback] arrives later, on the main thread. */
-    fun request(sessionId: Int, operation: Int, key: Int, limit: Int, callback: (RimeOutput) -> Unit)
+    /** Queue one engine operation; [callback] arrives later, on the main thread. Defaults match SNAPSHOT. */
+    fun request(sessionId: Int, operation: Int = 0, key: Int = 0, limit: Int = 64, callback: (RimeOutput) -> Unit)
 
     /** Cancel in-flight results and drop the current session. */
     fun reset()
