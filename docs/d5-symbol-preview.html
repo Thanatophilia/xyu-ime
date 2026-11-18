@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>絮雨 D5 符号页样稿 v2（分类键 + 滑动符号区）</title>
+<title>絮雨 D5 符号页样稿 v4（右下角浮块组 + 三行完整符号）</title>
 <style>
   :root { --bg:#f6f8f6; --key:#ffffff; --key2:#e5ebe8; --line:#d5ddd8; --ink:#1a211f; --muted:#6c7e77; --accent:#426c65; --accent2:#d6e5e0; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -21,21 +21,25 @@
   .tab.on { background: var(--accent2); border-color: var(--accent); color: var(--accent); font-weight:700; }
   .tab .cur { font-size:8.5px; margin-left:4px; }
 
-  .gridbox { position:relative; margin-top:3px; }
-  .grid { display:grid; grid-template-columns: repeat(8, 1fr); gap:3px; height:112px; overflow-y:auto; align-content:start; }
+  /* 符号区：完整三行；删除键为右下角浮块，不占行、不压缩符号区 */
+  .gridbox { position:relative; margin-top:3px; height:140px; }
+  .grid { display:grid; grid-template-columns: repeat(8, 1fr); gap:3px; height:100%; overflow-y:auto; align-content:start; padding-bottom:50px; }
   .sym { height:44px; background: var(--key); border:.5px solid var(--line); border-radius:7px;
          display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; }
   .sym:active { background: var(--accent2); }
   .sym .ch { font-size:19px; line-height:1.05; }
   .sym .nm { font-size:8px; color:var(--muted); margin-top:1px; transform:scale(.95); }
-  .scrollhint { position:absolute; right:5px; bottom:4px; font-size:9px; color:var(--muted); pointer-events:none; }
 
-  .delrow { display:flex; align-items:center; gap:8px; margin-top:4px; }
-  .dots { font-size:11px; color:var(--muted); }
-  .dots b { color:var(--accent); }
-  .delkey { margin-left:auto; width:96px; height:38px; border-radius:7px; background: var(--key2);
-            display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; }
+  .delkey { position:absolute; right:0; bottom:0; width:70px; height:46px; z-index:2;
+            border-radius:8px; background: var(--key); border:1px solid var(--accent);
+            box-shadow: 0 2px 6px rgba(30,60,50,.28);
+            display:flex; align-items:center; justify-content:center; gap:4px; font-size:14px; font-weight:600; color:var(--accent); cursor:pointer; }
   .delkey:active { background: var(--accent2); }
+
+  .dots { position:absolute; right:78px; bottom:0; z-index:2; height:46px; display:flex; align-items:center;
+          padding:0 9px; border-radius:8px; background:rgba(246,248,246,.94); border:.5px solid var(--line);
+          color:var(--muted); font-size:10.5px; pointer-events:none; }
+  .dots b { color:var(--accent); }
 
   .bottom { display:flex; gap:3px; margin-top:4px; }
   .bkey { height:40px; border-radius:7px; background: var(--key2); display:flex; align-items:center; justify-content:center; font-size:12.5px; }
@@ -53,8 +57,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>絮雨 D5 符号页样稿 v2 · 分类键 + 滑动符号区<span class="badge">供定稿</span></h1>
-  <p class="note">按你的要求：进符号页后底栏“！﹫#”变“ABC”；分类键在键盘区顶部；中间符号区<b>上下滑动</b>看当前分类全部符号、<b>左右滑动切换分类</b>；删除键在回车键正上方（右下角）。字母页、数字页、候选页、悬浮编码不动。</p>
+  <h1>絮雨 D5 符号页样稿 v4 · 右下角浮块组 + 三行完整符号<span class="badge">供定稿</span></h1>
+  <p class="note">按你最新要求：删除键不做整行——只有右下角一块浮出；其余区域完整显示<b>三行</b>符号。分类键在顶部，符号区上下滑动看本组全部、左右滑动切组（左滑下一组/右滑上一组，循环）；右下角圆点与删除键组成一组浮块，不占行。底栏“！﹫#”进符号页变“ABC”。</p>
 
   <div class="keyboard">
     <div class="strip">絮雨 · 符号 <span class="edit">编辑</span></div>
@@ -67,12 +71,8 @@
 
     <div class="gridbox">
       <div class="grid" id="grid"></div>
-      <div class="scrollhint">↕ 滚动 · ↔↕ 滑动切组</div>
-    </div>
-
-    <div class="delrow">
       <div class="dots" id="dots"></div>
-      <div class="delkey" onclick="alert('样稿示意：删除')">⌫ 删除</div>
+      <div class="delkey" onclick="alert('样稿示意：删除（长按连删）')">⌫ 删除</div>
     </div>
 
     <div class="bottom">
@@ -82,11 +82,11 @@
       <div class="bkey bmid">🌐</div><div class="bkey b1">回车</div>
     </div>
   </div>
-  <p class="note">↑ 底栏七键：仅第一个键在符号页显示“ABC”（点击返回字母页），其余六键顺序、宽度与 0.3.93 完全一致。</p>
+  <p class="note">↑ 符号区完整三行；右下角浮块组＝圆点指示＋删除键，压在网格右下方（被压的格子滚动后即可露出，滚动内容已留底部空间）。底栏仅首键变“ABC”，其余六键与 0.3.93 一致。</p>
 
   <div class="sect" id="sect"></div>
   <table id="t"></table>
-  <p class="note">说明：显示即插入；码点见表。分组滑动方向建议：左滑到下一组、右滑回上一组（循环）。删除键正对回车键上方。ASCII 输入框（邮箱/网址/密码）打开符号页时默认“英文符号”组——待你确认。</p>
+  <p class="note">代号点：每组字符"显示即插入"，码点见表。ASCII 输入框（邮箱/网址/密码）打开符号页默认“英文符号”组。</p>
 </div>
 
 <script>
@@ -113,10 +113,10 @@ function show(g){
     grid.appendChild(d);
   });
   const idx = order.indexOf(g);
-  document.getElementById('dots').innerHTML = order.map((k,i)=>
-    i===idx ? '<b>●</b>' : '○').join(' ')+' '+groups[g].name+' '+(idx+1)+'/3';
+  document.getElementById('dots').innerHTML = order.map((k,i)=> i===idx ? '<b>●</b>' : '○').join(' ')
+    + ' ' + (idx+1) + '/3';
   const sect=document.getElementById('sect');
-  sect.innerHTML='<b>'+groups[g].name+' · '+groups[g].items.length+' 个</b>（可在符号区上下滚动查看；左右滑动切换相邻分类）';
+  sect.innerHTML='<b>'+groups[g].name+' · '+groups[g].items.length+' 个</b>（上下滑动查看全部；左右滑动切换相邻分类）';
   const t=document.getElementById('t');
   t.innerHTML='<tr><th>字符</th><th>名称</th><th>码点</th><th>字符</th><th>名称</th><th>码点</th><th>字符</th><th>名称</th><th>码点</th></tr>';
   const items=groups[g].items;
@@ -130,15 +130,15 @@ function show(g){
     t.appendChild(tr);
   }
 }
-/* 左右滑动切换分组 */
-let sx=null;
+/* 左右滑动切换分组（左滑下一组，右滑上一组，循环） */
+let sx=null, sy=null;
 const box=document.querySelector('.gridbox');
-box.addEventListener('pointerdown',e=>{ sx=e.clientX; });
+box.addEventListener('pointerdown',e=>{ sx=e.clientX; sy=e.clientY; });
 box.addEventListener('pointerup',e=>{
-  if(sx===null) return; const dx=e.clientX-sx; sx=null;
-  if(Math.abs(dx)<40) return;
+  if(sx===null) return; const dx=e.clientX-sx, dy=e.clientY-sy; sx=null; sy=null;
+  if(Math.abs(dx)<40 || Math.abs(dx)<Math.abs(dy)) return;  // 主方向判定：纵向滚动不触发切组
   const i=order.indexOf(current);
-  const ni = dx<0 ? (i+1)%3 : (i+2)%3;   // 左滑下一组，右滑上一组（循环）
+  const ni = dx<0 ? (i+1)%3 : (i+2)%3;
   show(order[ni]);
 });
 show('cn');
