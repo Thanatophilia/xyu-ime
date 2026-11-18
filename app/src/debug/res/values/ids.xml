@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="fixture_native_editor" type="id" />
+    <item name="fixture_editor_a" type="id" />
+    <item name="fixture_editor_b" type="id" />
+    <item name="fixture_web_view" type="id" />
+</resources>
