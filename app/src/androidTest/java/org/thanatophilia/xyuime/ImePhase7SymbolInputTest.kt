@@ -272,7 +272,11 @@ class ImePhase7SymbolInputTest {
     }
 
     @Test fun floatingDeleteRemovesOneCharacter() = withSyntheticEditor { host, editor, snapshot ->
-        instrumentation.runOnMainSync { editor.setText("abc") }
+        instrumentation.runOnMainSync {
+            editor.setText("abc")
+            // setText leaves the caret at the start; a real user types at the end.
+            editor.setSelection(editor.text.length)
+        }
         tap("key:符号键盘")
         node("symbol_tab:cn")
         // The symbol page lays out in a couple of frames; settle before tapping the overlay.
