@@ -180,9 +180,9 @@ class ImePhase7SymbolInputTest {
         assertGroupSelected("symbol_tab:cn")
         tapDescription("顿号")
         tapDescription("书名号左")
-        tapDescription("省略号")
+        tapDescription("方头括号左")
         awaitSnapshot(snapshot, "Chinese punctuation must land textually") {
-            it.text == "、《…" && it.composing == null
+            it.text == "、《【" && it.composing == null
         }
         // The first bottom key is ABC on the symbol page and returns to letters.
         assertEquals("ABC", node("key:返回字母键盘").text)
@@ -191,6 +191,20 @@ class ImePhase7SymbolInputTest {
         typeLetters("an")
         awaitSnapshot(snapshot, "Letters keep working after the symbol page") {
             it.composing?.replace(" ", "") == "an"
+        }
+    }
+
+    @Test fun scrollingRevealsTheCellCoveredByFloatingDelete() = withSyntheticEditor { host, editor, snapshot ->
+        tap("key:符号键盘")
+        node("symbol_tab:cn")
+        // 省略号 sits exactly under the floating delete key on the first screen; scrolling
+        // must move it out from under the overlay so it can be tapped.
+        val grid = node("symbol_grid").visibleBounds
+        device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 60)
+        device.waitForIdle()
+        tapDescription("省略号")
+        awaitSnapshot(snapshot, "A scrolled-into-view symbol must be tappable") {
+            it.text == "…" && it.composing == null
         }
     }
 
@@ -240,9 +254,9 @@ class ImePhase7SymbolInputTest {
         tap("key:符号键盘")
         node("symbol_tab:cn")
         // One grid cell: deletes exactly one character per tap.
-        tap("key:删除，长按连续删除")
+        tap("key:删除")
         awaitSnapshot(snapshot, "Floating delete must remove exactly one character") { it.text == "ab" }
-        tap("key:删除，长按连续删除")
+        tap("key:删除")
         awaitSnapshot(snapshot, "Second tap deletes one more") { it.text == "a" }
     }
 }

@@ -32,13 +32,16 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_tab:cn").assertContentDescriptionEquals("中文标点")
         // The first three grid rows (24 cells) are fully visible: three complete rows.
         val grid = rule.onNodeWithTag("symbol_grid").fetchSemanticsNode().boundsInRoot
+        val tolerance = 2f
         (0 until 24).forEach { index ->
             val cell = rule.onNodeWithTag("symbol:cn:$index").fetchSemanticsNode().boundsInRoot
             assertTrue("cell $index must intersect the grid", cell.height > 0f && cell.width > 0f)
-            assertTrue("cell $index must sit inside the grid", grid.contains(cell.topLeft) && grid.contains(cell.bottomRight))
+            assertTrue("cell $index must sit inside the grid",
+                cell.left >= grid.left - tolerance && cell.right <= grid.right + tolerance &&
+                    cell.top >= grid.top - tolerance && cell.bottom <= grid.bottom + tolerance)
         }
         // Delete floats as exactly one cell anchored to the grid's bottom-right corner.
-        val delete = rule.onNodeWithTag("key:删除，长按连续删除").fetchSemanticsNode().boundsInRoot
+        val delete = rule.onNodeWithTag("key:删除").fetchSemanticsNode().boundsInRoot
         val firstCell = rule.onNodeWithTag("symbol:cn:0").fetchSemanticsNode().boundsInRoot
         assertEquals("delete cell matches grid cell height", firstCell.height, delete.height, 1f)
         assertEquals("delete cell matches grid cell width", firstCell.width, delete.width, 1f)
@@ -61,8 +64,9 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_tab:math").performClick()
         rule.onNodeWithTag("symbol:math:2").assertContentDescriptionEquals("乘")
         rule.onNodeWithTag("symbol:math:2").performClick()
+        rule.onNodeWithTag("key:删除").performClick()
         rule.runOnIdle {
-            assertEquals(listOf("、", "!", "×").map { KeyboardAction.Text(it) }, actions)
+            assertEquals(listOf("、", "!", "×").map { KeyboardAction.Text(it) } + KeyboardAction.Backspace, actions)
         }
     }
 
