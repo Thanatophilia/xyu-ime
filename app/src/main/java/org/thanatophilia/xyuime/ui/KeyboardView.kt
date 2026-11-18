@@ -318,14 +318,15 @@ private fun KeyboardSurface(
     val stripScroll = remember(state.candidateRevision, stripWidthPx, density.density, fontScale) { LazyListState() }
     val candidateCount by rememberUpdatedState(state.candidates.size)
     var continuationStart by remember(stripScroll) { mutableStateOf<Int?>(null) }
+    fun initialStartFromCurrentLayout(): Int? {
+        val layout = stripScroll.layoutInfo
+        return if (layout.totalItemsCount != candidateCount) null else initialCandidateContinuationStart(
+            layout.visibleItemsInfo.map { StripCandidateBounds(it.index, it.offset, it.size) },
+            layout.viewportStartOffset, layout.viewportEndOffset, candidateCount,
+            stripScroll.firstVisibleItemIndex, stripScroll.firstVisibleItemScrollOffset)
+    }
     LaunchedEffect(stripScroll) {
-        snapshotFlow {
-            val layout = stripScroll.layoutInfo
-            if (layout.totalItemsCount != candidateCount) null else initialCandidateContinuationStart(
-                layout.visibleItemsInfo.map { StripCandidateBounds(it.index, it.offset, it.size) },
-                layout.viewportStartOffset, layout.viewportEndOffset, candidateCount,
-                stripScroll.firstVisibleItemIndex, stripScroll.firstVisibleItemScrollOffset)
-        }.collect { initialStart ->
+        snapshotFlow { initialStartFromCurrentLayout() }.collect { initialStart ->
             if (continuationStart == null && initialStart != null) continuationStart = initialStart
         }
     }
@@ -357,8 +358,14 @@ private fun KeyboardSurface(
         if (state.preedit.isNotEmpty()) CandidateStrip(state, onAction, stripScroll,
             Modifier.fillMaxWidth().height(stripHeight).onSizeChanged { stripWidthPx = it.width },
             onToggle = {
-                if (org.thanatophilia.xyuime.BuildConfig.DEBUG) android.util.Log.d("XyuLayout",
-                    "toggle ready=${continuationStart != null} expanded=${state.candidatesExpanded} first=${stripScroll.firstVisibleItemIndex} offset=${stripScroll.firstVisibleItemScrollOffset} count=${stripScroll.layoutInfo.totalItemsCount}/${state.candidates.size} width=$stripWidthPx")
+                // A wide/rotated strip may become ready between the layout-flow emissions.
+                // Capture only a still-leftmost layout, never the user's scrolled viewport.
+                if (continuationStart == null) continuationStart = initialStartFromCurrentLayout()
+                if (org.thanatophilia.xyuime.BuildConfig.DEBUG) {
+                    val layout = stripScroll.layoutInfo
+                    android.util.Log.d("XyuLayout",
+                        "toggle ready=${continuationStart != null} expanded=${state.candidatesExpanded} first=${stripScroll.firstVisibleItemIndex} offset=${stripScroll.firstVisibleItemScrollOffset} count=${layout.totalItemsCount}/${state.candidates.size} viewport=${layout.viewportStartOffset}:${layout.viewportEndOffset} visible=${layout.visibleItemsInfo.size} width=$stripWidthPx")
+                }
                 if (continuationStart != null) onAction(KeyboardAction.ToggleCandidates)
             }) else InfoStrip(
             state = state,
