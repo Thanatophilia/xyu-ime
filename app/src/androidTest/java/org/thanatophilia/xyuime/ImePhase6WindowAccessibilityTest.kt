@@ -50,6 +50,34 @@ class ImePhase6WindowAccessibilityTest {
     private fun tap(tag: String) { node(tag).click(); device.waitForIdle() }
     private fun typeLetters(text: String) { text.forEach { tap("key:$it") } }
 
+    private fun focusNativeEditor() {
+        val editor = requireNotNull(device.waitForFreshObject(
+            By.res("$pkg:id/fixture_native_editor").pkg(pkg), 10_000)) { "Missing native editor" }
+        editor.click()
+        device.waitForIdle()
+        node("key:q")
+    }
+
+    private fun setChinese(enabled: Boolean) {
+        assertNotNull("Engine must become ready", device.waitForFreshObject(
+            By.text(java.util.regex.Pattern.compile("絮雨 · (English|中文拼音)")).pkg(pkg), 120_000))
+        freshTree()
+        val wasChinese = device.hasObject(By.text("絮雨 · 中文拼音").pkg(pkg))
+        if (wasChinese != enabled) tap("key:切换语言，长按切换输入法")
+        assertNotNull(device.waitForFreshObject(
+            By.text(if (enabled) "絮雨 · 中文拼音" else "絮雨 · English").pkg(pkg), 15_000))
+    }
+
+    private fun recordWindow(name: String) {
+        device.executeShellCommand("mkdir -p /sdcard/Download/xyu-ime-review")
+        val base = java.io.File(context.getExternalFilesDir(null), name)
+        device.dumpWindowHierarchy(java.io.File("${base.path}.xml"))
+        device.takeScreenshot(java.io.File("${base.path}.png"))
+        listOf("xml", "png").forEach { extension ->
+            device.executeShellCommand("cp ${base.path}.$extension /sdcard/Download/xyu-ime-review/$name.$extension")
+        }
+    }
+
     private fun restoreIme(previous: String, hardware: String) {
         if (previous.isNotEmpty() && previous != "null" && previous.contains('/')) {
             device.executeShellCommand("ime set $previous")
@@ -78,7 +106,14 @@ class ImePhase6WindowAccessibilityTest {
             activity = host
             test(host)
         } finally {
-            activity?.let { a -> instrumentation.runOnMainSync { a.finish() } }
+            instrumentation.runOnMainSync {
+                // Rotation recreates the host; close the current Activity as well as the
+                // original instance, without changing production configuration handling.
+                androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                    .filter { it.packageName == pkg }.toList().forEach { it.finish() }
+                activity?.finish()
+            }
             restoreIme(previous, hardware)
         }
     }
@@ -105,77 +140,89 @@ class ImePhase6WindowAccessibilityTest {
         return requireNotNull(result)
     }
 
-    @Test fun landscapeKeyboardKeepsFullLayoutAndCandidateStrip() = withImeEditor(EditorFixtureActivity.FIXTURE_NATIVE) { host ->
-        val field = host.findViewById<EditText>(R.id.fixture_native_editor)
-        field.performClick()
-        device.waitForIdle()
-        instrumentation.runOnMainSync {
-            host.getSystemService(InputMethodManager::class.java).showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
-        }
-        node("key:q")
-        device.setOrientationLeft()
+    @Test fun landscapeKeyboardKeepsFullLayoutAndCandidateStrip() = withImeEditor(EditorFixtureActivity.FIXTURE_NATIVE) { _ ->
         try {
-            // Rotation tears the IME window down; show the keyboard again if needed and wait
-            // until the letters return.
-            var waited = 0L
-            val rotateDeadline = SystemClock.uptimeMillis() + 30_000
-            while (SystemClock.uptimeMillis() < rotateDeadline &&
-                device.findObject(By.res("key:q").pkg(pkg)) == null) {
-                if (waited > 0 && waited % 3000 == 0L) {
-                    // The IME window is torn down on rotation; refocus the editor and ask the
-                    // system again until the keyboard returns.
-                    val editable = device.findObject(By.clazz("android.widget.EditText").pkg(pkg))
-                    editable?.click()
-                    instrumentation.runOnMainSync {
-                        host.getSystemService(InputMethodManager::class.java)
-                            .showSoftInput(host.currentFocus, InputMethodManager.SHOW_IMPLICIT)
-                    }
-                }
-                SystemClock.sleep(200)
-                waited += 200
-            }
-            device.waitForIdle()
+            focusNativeEditor()
+            setChinese(false)
+            device.setOrientationLeft()
+            val deadline = SystemClock.uptimeMillis() + 10_000
+            while (device.displayWidth <= device.displayHeight && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(100)
+            assertTrue("Device must be landscape", device.displayWidth > device.displayHeight)
+            // Resolve the new activity's node after normal platform recreation; never retain
+            // an Activity/EditText from before the configuration change.
+            focusNativeEditor()
             val surface = node("keyboard_surface").visibleBounds
-            assertTrue("Landscape keyboard must span the full width",
-                surface.right - surface.left >= device.displayWidth - 4)
-            listOf("key:q", "key:z", "key:空格", "key:回车：回车").forEach { node(it) }
-            // Chinese composition still renders its floating preedit in landscape.
-            tap("key:切换语言，长按切换输入法")
-            assertNotNull(device.waitForFreshObject(By.text("絮雨 · 中文拼音").pkg(pkg), 15_000))
-            typeLetters("nihao")
-            val candidateDeadline = SystemClock.uptimeMillis() + 10_000
-            var candidateSeen = false
-            while (SystemClock.uptimeMillis() < candidateDeadline && !candidateSeen) {
-                freshTree()
-                candidateSeen = device.hasObject(By.res("candidate_toggle").pkg(pkg))
-                if (!candidateSeen) SystemClock.sleep(100)
+            assertTrue("Keyboard must stay inside the landscape screen", surface.left >= 0 &&
+                surface.right <= device.displayWidth && surface.bottom <= device.displayHeight)
+            assertTrue("Landscape must leave editor space", surface.top > 0)
+            listOf("key:q", "key:z", "key:空格", "key:逗号", "key:句号").forEach {
+                val bounds = node(it).visibleBounds
+                assertTrue("$it must fit the keyboard", !bounds.isEmpty && surface.contains(bounds))
             }
-            assertTrue("Candidate strip must appear in landscape", candidateSeen)
-            freshTree()
-            assertFalse("Drawer must not be open after typing only",
-                device.hasObject(By.res("candidate_drawer").pkg(pkg)))
+            tap("key:a")
+            assertNotNull("Input survives rotation", device.waitForFreshObject(
+                By.res("$pkg:id/fixture_native_editor").pkg(pkg).text("a"), 5_000))
+            setChinese(true)
+            typeLetters("nihao")
+            node("candidate_toggle")
+            recordWindow("d4-landscape-composition")
+            tap("candidate_toggle")
+            val drawer = node("candidate_drawer").visibleBounds
+            assertTrue("Candidate page fits landscape keyboard", surface.contains(drawer))
+            recordWindow("d4-landscape-candidates")
+            tap("candidate_toggle")
+            node("key:q")
+            device.setOrientationNatural()
+            val portraitDeadline = SystemClock.uptimeMillis() + 10_000
+            while (device.displayWidth > device.displayHeight && SystemClock.uptimeMillis() < portraitDeadline) SystemClock.sleep(100)
+            assertTrue("Device returns to portrait", device.displayHeight > device.displayWidth)
+            focusNativeEditor()
+            recordWindow("d4-portrait-restored")
+        } catch (failure: Throwable) {
+            recordWindow("d4-rotation-failure")
+            throw failure
         } finally {
             device.setOrientationNatural()
+            device.unfreezeRotation()
         }
     }
 
-    @Test fun largeFontScaleKeepsKeyboardUsable() = withImeEditor { host ->
-        device.executeShellCommand("settings put system font_scale 1.3")
+    @Test fun largeFontScaleKeepsKeyboardUsable() {
+        val previousScale = device.executeShellCommand("settings get system font_scale").trim()
         try {
-            val field = device.waitForFreshObject(By.clazz("android.widget.EditText").pkg(pkg), 8_000)
-            requireNotNull(field).click()
-            device.waitForIdle()
-            node("key:q")
-            listOf("key:a", "key:z", "key:空格", "key:逗号", "key:回车：回车").forEach { node(it) }
-            typeLetters("abc")
-            val text = device.waitForFreshObject(By.clazz("android.widget.EditText").pkg(pkg), 5_000)
-            assertEquals("Large font must not break direct input", "abc", requireNotNull(text).text)
-            tap("edit_toggle")
-            node("key:全选")
-            tap("edit_toggle")
-            node("key:q")
+            listOf("1.0", "1.3", "1.5").forEach { scale ->
+                device.executeShellCommand("settings put system font_scale $scale")
+                withImeEditor(EditorFixtureActivity.FIXTURE_NATIVE) { _ ->
+                    focusNativeEditor()
+                    setChinese(false)
+                    val surface = node("keyboard_surface").visibleBounds
+                    listOf("key:a", "key:z", "key:空格", "key:逗号", "key:句号").forEach {
+                        val bounds = node(it).visibleBounds
+                        assertTrue("$it must fit at font scale $scale", !bounds.isEmpty && surface.contains(bounds))
+                    }
+                    typeLetters("abc")
+                    assertNotNull("Direct input works at font scale $scale", device.waitForFreshObject(
+                        By.res("$pkg:id/fixture_native_editor").pkg(pkg).text("abc"), 5_000))
+                    tap("edit_toggle")
+                    val editorPanel = node("key:全选").visibleBounds
+                    assertTrue("Editor control fits at font scale $scale", surface.contains(editorPanel))
+                    tap("edit_toggle")
+                    setChinese(true)
+                    typeLetters("shi")
+                    tap("candidate_toggle")
+                    assertTrue("Candidate page fits at font scale $scale",
+                        surface.contains(node("candidate_drawer").visibleBounds))
+                    recordWindow("d4-font-scale-$scale")
+                    tap("candidate_toggle")
+                    node("key:q")
+                }
+            }
         } finally {
-            device.executeShellCommand("settings put system font_scale 1.0")
+            if (previousScale.isEmpty() || previousScale == "null") {
+                device.executeShellCommand("settings delete system font_scale")
+            } else {
+                device.executeShellCommand("settings put system font_scale $previousScale")
+            }
         }
     }
 

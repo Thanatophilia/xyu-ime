@@ -589,7 +589,9 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
             SyllableChoice(null, wordFilter == CandidateWordFilter.Single, {
                 onWordFilter(if (wordFilter == CandidateWordFilter.Single) CandidateWordFilter.All
                 else CandidateWordFilter.Single)
-            }, tag = "candidate_type", label = typeLabel)
+            }, tag = "candidate_type", label = typeLabel,
+                spokenDescription = "切换候选字类",
+                spokenState = if (wordFilter == CandidateWordFilter.Single) "仅单字候选" else "全部字词候选")
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)))
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
@@ -666,7 +668,8 @@ private fun CandidateDrawer(state: KeyboardUiState, onAction: (KeyboardAction) -
 
 @Composable
 private fun SyllableChoice(syllable: String?, active: Boolean, select: (String?) -> Unit,
-    tag: String? = null, label: String? = null) {
+    tag: String? = null, label: String? = null, spokenDescription: String? = null,
+    spokenState: String? = null) {
     val shape = RoundedCornerShape(6.dp)
     // Keep the clickable surface at least 48dp tall inside its 2dp top/bottom inset.
     // Otherwise Compose expands accessibility/touch bounds past the pinned rail edge.
@@ -678,7 +681,8 @@ private fun SyllableChoice(syllable: String?, active: Boolean, select: (String?)
             testTag = tag ?: "syllable:${syllable ?: "all"}"
             selected = active
             role = Role.Tab
-            contentDescription = if (syllable == null) "全部候选" else "拼音 $syllable"
+            contentDescription = spokenDescription ?: if (syllable == null) "全部候选" else "拼音 $syllable"
+            spokenState?.let { stateDescription = it }
         }.padding(horizontal = 3.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
         Text(label ?: syllable ?: "全部", fontSize = 14.sp, maxLines = 1,
             overflow = TextOverflow.Ellipsis, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
@@ -769,7 +773,13 @@ private fun LettersPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> U
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 KeyFace("Shift", "切换大小写，长按锁定大写", fontScale, keyShape, Modifier.weight(1.5f).fillMaxHeight(),
                     active = state.uppercase, onClick = { onAction(KeyboardAction.Shift) },
-                    onLongClick = { onAction(KeyboardAction.CapsLock) }, icon = "shift", locked = state.capsLock)
+                    onLongClick = { onAction(KeyboardAction.CapsLock) }, icon = "shift", locked = state.capsLock,
+                    spokenState = when {
+                        state.chinese -> "中文拼音"
+                        state.capsLock -> "大写已锁定"
+                        state.uppercase -> "大写"
+                        else -> "小写"
+                    }, longClickLabel = "切换大写锁定")
                 LETTER_ROW_THREE.forEach { letter ->
                     val text = if (state.uppercase) letter.uppercase() else letter
                     KeyFace(text, text, fontScale, keyShape, Modifier.weight(1f).fillMaxHeight(),
@@ -850,7 +860,8 @@ private fun BottomBar(state: KeyboardUiState, onAction: (KeyboardAction) -> Unit
         KeyFace(state.period, "句号", fontScale, keyShape, Modifier.weight(0.70f).fillMaxHeight(),
             onClick = { onAction(KeyboardAction.Text(state.period)) })
         KeyFace("", "切换语言，长按切换输入法", fontScale, keyShape, Modifier.weight(0.95f).fillMaxHeight(),
-            onClick = { onAction(KeyboardAction.NextLanguage) }, onLongClick = { onAction(KeyboardAction.PickInputMethod) }, icon = "globe")
+            onClick = { onAction(KeyboardAction.NextLanguage) }, onLongClick = { onAction(KeyboardAction.PickInputMethod) }, icon = "globe",
+            spokenState = state.inputHint, longClickLabel = "选择系统输入法")
         KeyFace(state.actionLabel, "回车：${state.actionLabel}", fontScale, keyShape, Modifier.width(sideKeyWidth).fillMaxHeight(),
             active = true, small = true, onClick = { onAction(KeyboardAction.Enter) })
     }
@@ -904,7 +915,7 @@ private fun DeleteKey(onAction: (KeyboardAction) -> Unit, fontScale: Float, shap
 private fun KeyFace(label: String, description: String, fontScale: Float, shape: Shape,
     modifier: Modifier, active: Boolean = false, small: Boolean = false, repeat: Boolean = false, enabled: Boolean = true,
     onClick: () -> Unit, onLongClick: (() -> Unit)? = null, icon: String? = null, locked: Boolean = false,
-    customTag: String? = null) {
+    customTag: String? = null, spokenState: String? = null, longClickLabel: String = "长按") {
     val colors = MaterialTheme.colorScheme
     val view = LocalView.current
     val configuration = LocalViewConfiguration.current
@@ -970,13 +981,14 @@ private fun KeyFace(label: String, description: String, fontScale: Float, shape:
         .then(gesture).clearAndSetSemantics {
             role = Role.Button
             contentDescription = description
+            spokenState?.let { stateDescription = it }
             testTagsAsResourceId = true
             testTag = customTag ?: "key:$description"
             if (icon == null) text = AnnotatedString(label)
             if (!enabled) disabled()
             onClick { if (available) { click(); true } else false }
             if (onLongClick != null && enabled) {
-                this.onLongClick(label = "长按") { longClick?.invoke(); true }
+                this.onLongClick(label = longClickLabel) { longClick?.invoke(); true }
             }
         }, contentAlignment = Alignment.Center) {
         if (icon != null) {
