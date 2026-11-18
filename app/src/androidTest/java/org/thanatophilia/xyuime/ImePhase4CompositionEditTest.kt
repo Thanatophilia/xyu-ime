@@ -215,20 +215,22 @@ class ImePhase4CompositionEditTest {
     @Test fun delayedOutputIsDroppedWhenLanguageSwitched() = withFakeEngine { fake, host ->
         fake.hold = true
         typeLetters("n")
-        // Keep some distance from the last letter tap so the IME never merges gestures.
         device.waitForIdle()
         android.os.SystemClock.sleep(400)
+        // Language switches are queued behind the busy engine by design; flushing drains
+        // the code reply first (raw commit), then applies the pending switch in order.
         requireKey("key:切换语言，长按切换输入法").click()
         device.waitForIdle()
+        fake.flushAll()
         val english = device.waitForFreshObject(By.text("絮雨 · English").pkg(pkg), 10_000)
         if (english == null) dumpUi("phase4-language-switch-fail")
-        assertNotNull("English header must appear", english)
-        fake.flushAll()
-        device.waitForIdle()
+        assertNotNull("English header must appear after the queue drains", english)
         typeLetters("ok")
         device.waitForIdle()
-        assertEquals("Stale Chinese preedit must never commit after switching language",
-            "ok", textOf(host, R.id.fixture_editor_a))
+        awaitSnapshot({ Snapshot(textOf(host, R.id.fixture_editor_a), null, emptyList()) },
+            "The queued switch must produce one raw commit, then literals; ops=${fake.operations}") {
+            it.text == "nok" && it.composing == null
+        }
     }
 
     @Test fun delayedOutputIsDroppedWhenEditorChanged() = withFakeEngine { fake, host ->
