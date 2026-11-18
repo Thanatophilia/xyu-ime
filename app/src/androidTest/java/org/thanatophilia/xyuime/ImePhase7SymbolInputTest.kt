@@ -276,9 +276,9 @@ class ImePhase7SymbolInputTest {
         tap("key:符号键盘")
         node("symbol_tab:cn")
         // One grid cell: deletes exactly one character per tap.
-        tap("key:删除")
+        tap("key:删除，长按连续删除")
         awaitSnapshot(snapshot, "Floating delete must remove exactly one character") { it.text == "ab" }
-        tap("key:删除")
+        tap("key:删除，长按连续删除")
         awaitSnapshot(snapshot, "Second tap deletes one more") { it.text == "a" }
     }
 }

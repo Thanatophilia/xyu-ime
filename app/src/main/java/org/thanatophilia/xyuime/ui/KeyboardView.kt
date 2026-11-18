@@ -932,30 +932,10 @@ private fun SymbolsPagePanel(
                 }
             }
             // Exactly one cell: floats on the grid's bottom-right and covers one symbol.
-            // Single-tap delete, same click channel as the grid keys; long-press repeat is
-            // intentionally not offered here (the covered cell stays reachable by scrolling).
-            SymbolDeleteKey(onAction, keyShape,
+            // Uses the same key component as the letter page's backspace (press repeats).
+            DeleteKey(onAction, fontScale, keyShape,
                 Modifier.align(Alignment.BottomEnd).width(cellWidth).height(keyHeight))
         }
-    }
-}
-
-@Composable
-private fun SymbolDeleteKey(onAction: (KeyboardAction) -> Unit, shape: Shape, modifier: Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Box(modifier.clip(shape)
-        .background(if (isSystemInDarkTheme()) Color(0xFF2C3431) else Color.White)
-        .border(0.5.dp, colors.outline.copy(alpha = 0.14f), shape)
-        .clickable { onAction(KeyboardAction.Backspace) }
-        .clearAndSetSemantics {
-            testTagsAsResourceId = true
-            testTag = "key:删除"
-            contentDescription = "删除"
-            role = Role.Button
-            onClick { onAction(KeyboardAction.Backspace); true }
-        },
-        contentAlignment = Alignment.Center) {
-        KeyIcon("delete", colors.onSurface, locked = false, Modifier.size(22.dp).clearAndSetSemantics {})
     }
 }
 
