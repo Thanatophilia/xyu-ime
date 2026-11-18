@@ -53,6 +53,24 @@ class ImePhase4CompositionEditTest {
     private fun tap(tag: String) { node(tag).click(); device.waitForIdle() }
     private fun typeLetters(text: String) { text.forEach { tap("key:$it") } }
 
+    private fun dumpUi(prefix: String) {
+        try {
+            freshTree()
+            val file = java.io.File(context.getExternalFilesDir(null), "$prefix.xml")
+            device.dumpWindowHierarchy(file)
+            device.executeShellCommand("mkdir -p /sdcard/Download/xyu-ime-review")
+            device.executeShellCommand("cp ${file.absolutePath} /sdcard/Download/xyu-ime-review/$prefix.xml")
+        } catch (_: Throwable) { }
+    }
+
+    /** Tap with a diagnostic UI dump when the key is missing, instead of a bare timeout. */
+    private fun requireKey(tag: String): UiObject2 {
+        freshTree()
+        val key = device.waitForFreshObject(By.res(tag).pkg(pkg), 5_000)
+        if (key == null) dumpUi("phase4-missing-$tag")
+        return requireNotNull(key) { "Missing key: $tag" }
+    }
+
     private fun awaitChineseHeader() {
         val ready = By.text(java.util.regex.Pattern.compile("絮雨 · (English|中文拼音)")).pkg(pkg)
         assertNotNull("Engine readiness must finish", device.waitForFreshObject(ready, 120_000))
@@ -197,8 +215,14 @@ class ImePhase4CompositionEditTest {
     @Test fun delayedOutputIsDroppedWhenLanguageSwitched() = withFakeEngine { fake, host ->
         fake.hold = true
         typeLetters("n")
-        tap("key:切换语言，长按切换输入法")
-        assertNotNull("English header must appear", device.waitForFreshObject(By.text("絮雨 · English").pkg(pkg), 10_000))
+        // Keep some distance from the last letter tap so the IME never merges gestures.
+        device.waitForIdle()
+        android.os.SystemClock.sleep(400)
+        requireKey("key:切换语言，长按切换输入法").click()
+        device.waitForIdle()
+        val english = device.waitForFreshObject(By.text("絮雨 · English").pkg(pkg), 10_000)
+        if (english == null) dumpUi("phase4-language-switch-fail")
+        assertNotNull("English header must appear", english)
         fake.flushAll()
         device.waitForIdle()
         typeLetters("ok")
