@@ -43,6 +43,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -224,9 +225,18 @@ private const val SYMBOL_COLUMNS = 8
 /** Category chips shown at once; the remaining groups scroll into view horizontally. */
 private const val VISIBLE_SYMBOL_TABS = 5
 
-/** A vertical drag follows the finger; release leaves no residual inertial motion. */
-private object NoFlingBehavior : FlingBehavior {
-    override suspend fun ScrollScope.performFling(initialVelocity: Float): Float = 0f
+internal const val SYMBOL_VERTICAL_FLING_SCALE = 0.35f
+
+/** A vertical drag follows the finger; release retains only 35% of normal fling velocity. */
+internal class GentleSymbolFlingBehavior(private val delegate: FlingBehavior) : FlingBehavior {
+    override suspend fun ScrollScope.performFling(initialVelocity: Float): Float =
+        with(delegate) { performFling(initialVelocity * SYMBOL_VERTICAL_FLING_SCALE) }
+}
+
+@Composable
+private fun rememberGentleSymbolFlingBehavior(): FlingBehavior {
+    val delegate = ScrollableDefaults.flingBehavior()
+    return remember(delegate) { GentleSymbolFlingBehavior(delegate) }
 }
 
 
@@ -1024,11 +1034,12 @@ private fun SymbolGridContent(
     // Revisited categories still start at the top, as before; a vertical drag in the current
     // page keeps using this same LazyGridState and is independent of the horizontal pager.
     val gridState = remember(group, settledPage) { LazyGridState() }
+    val gentleFling = rememberGentleSymbolFlingBehavior()
     LazyVerticalGrid(
         columns = GridCells.Fixed(SYMBOL_COLUMNS),
         state = gridState,
         modifier = contentModifier,
-        flingBehavior = NoFlingBehavior,
+        flingBehavior = gentleFling,
         contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
         verticalArrangement = Arrangement.spacedBy(gap),
         horizontalArrangement = Arrangement.spacedBy(gap),

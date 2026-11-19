@@ -127,7 +127,7 @@ class KeyboardSymbolPageTest {
         rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
     }
 
-    @Test fun verticalGridStopsImmediatelyAfterReleaseWithoutInertia() {
+    @Test fun verticalGridKeepsReducedFlingAfterRelease() {
         setKeyboard(ascii = false, actions = mutableListOf())
         fun probeY(): Float = rule.onNodeWithTag("symbol:common:8", useUnmergedTree = true)
             .fetchSemanticsNode().positionInRoot.y
@@ -136,16 +136,18 @@ class KeyboardSymbolPageTest {
         try {
             rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).performTouchInput {
                 down(Offset(width * .5f, height * .82f))
-                moveTo(Offset(width * .5f, height * .48f), delayMillis = 120)
-                moveTo(Offset(width * .5f, height * .20f), delayMillis = 140)
+                moveTo(Offset(width * .5f, height * .56f), delayMillis = 16)
+                moveTo(Offset(width * .5f, height * .28f), delayMillis = 16)
                 up()
             }
-            rule.mainClock.advanceTimeBy(120)
-            val afterRelease = probeY()
-            assertTrue("Vertical drag must move the content with the finger", afterRelease != before)
-            rule.mainClock.advanceTimeBy(500)
+            val atRelease = probeY()
+            assertTrue("Vertical drag must move content with the finger", atRelease != before)
+            rule.mainClock.advanceTimeBy(100)
+            val afterCoast = probeY()
+            assertTrue("A quick release should retain a small, reduced coast", abs(afterCoast - atRelease) > 0.5f)
+            rule.mainClock.advanceTimeBy(350)
             val settled = probeY()
-            assertEquals("Vertical content must not keep drifting after release", afterRelease, settled, 0.5f)
+            assertTrue("The reduced fling should settle after its short coast", abs(settled - afterCoast) < abs(afterCoast - atRelease) + 1f)
         } finally {
             rule.mainClock.autoAdvance = true
             rule.mainClock.advanceTimeBy(500)
