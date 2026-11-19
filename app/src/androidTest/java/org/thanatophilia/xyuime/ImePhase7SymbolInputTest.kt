@@ -255,6 +255,7 @@ class ImePhase7SymbolInputTest {
         val deadline = SystemClock.uptimeMillis() + 8_000
         val minTapHeight = 42f * context.resources.displayMetrics.density
         val deleteBounds = node("key:删除").visibleBounds
+        val scrollSamples = mutableListOf<String>()
         var covered: UiObject2? = null
         while (SystemClock.uptimeMillis() < deadline && covered == null) {
             freshTree()
@@ -262,17 +263,20 @@ class ImePhase7SymbolInputTest {
             if (candidate != null) {
                 val bounds = candidate.visibleBounds
                 val centerX = bounds.centerX(); val centerY = bounds.centerY()
+                scrollSamples.add("star=$bounds centerCovered=${deleteBounds.contains(centerX, centerY)}")
                 if (bounds.height() >= minTapHeight && !deleteBounds.contains(centerX, centerY)) {
                     covered = candidate
                     break
                 }
+            } else {
+                scrollSamples.add("star=not-visible")
             }
             val grid = node("symbol_page:common").visibleBounds
             device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 120)
             device.waitForIdle()
             SystemClock.sleep(60)
         }
-        val target = requireNotNull(covered) { "Covered star never reached a safe tap area" }
+        val target = requireNotNull(covered) { "Covered star never reached a safe tap area; samples=$scrollSamples delete=$deleteBounds" }
         target.click()
         device.waitForIdle()
         awaitSnapshot(snapshot, "The symbol under the delete overlay must be tappable after scrolling") {
