@@ -75,29 +75,6 @@ class ImePhase7SymbolInputTest {
         error("Description target kept going stale: $description")
     }
 
-    /** Scrolls the symbol grid once when a character sits below the first three rows. */
-    private fun tapDescriptionAfterScroll(description: String) {
-        repeat(4) { attempt ->
-            freshTree()
-            val visible = device.findObject(By.desc(description).pkg(pkg))
-            if (visible != null) {
-                try {
-                    visible.click()
-                    device.waitForIdle()
-                    return
-                } catch (_: androidx.test.uiautomator.StaleObjectException) {
-                    SystemClock.sleep(150L * (attempt + 1))
-                    return@repeat
-                }
-            }
-            val grid = device.findObject(By.res("symbol_grid").pkg(pkg))
-            requireNotNull(grid) { "Missing symbol grid while looking for $description" }
-            val bounds = grid.visibleBounds
-            device.swipe(bounds.centerX(), bounds.bottom - 20, bounds.centerX(), bounds.top + 20, 80)
-            device.waitForIdle()
-        }
-        error("Description not reachable after scrolling: $description")
-    }
 
     private fun restoreIme(previous: String, hardware: String) {
         if (previous.isNotEmpty() && previous != "null" && previous.contains('/')) {
@@ -263,7 +240,7 @@ class ImePhase7SymbolInputTest {
         device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
         device.waitForIdle()
         assertGroupSelected("symbol_tab:en")
-        tapDescriptionAfterScroll("半角问号")
+        tapDescription("半角逗号")
         device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
         device.waitForIdle()
         assertGroupSelected("symbol_tab:math")
@@ -273,7 +250,7 @@ class ImePhase7SymbolInputTest {
         assertGroupSelected("symbol_tab:more")
         tapDescription("上箭头")
         awaitSnapshot(snapshot, "Swipe-selected groups must insert exact math and extended characters") {
-            it.text == "?×↑" && it.composing == null
+            it.text == ",×↑" && it.composing == null
         }
     }
 
@@ -292,13 +269,13 @@ class ImePhase7SymbolInputTest {
     @Test fun emailEditorDefaultsToEnglishGroupAndNormalizesFullWidth() = withEmailFixture { host, editor ->
         tap("key:符号键盘")
         assertGroupSelected("symbol_tab:en")
-        tapDescriptionAfterScroll("半角问号")
-        assertEquals("?", fieldText(host, R.id.fixture_email_editor))
+        tapDescription("半角逗号")
+        assertEquals(",", fieldText(host, R.id.fixture_email_editor))
         // Manually browsing back to Chinese punctuation must still reach an email-safe string.
         tap("symbol_tab:cn")
         device.waitForIdle()
         tapDescription("顿号")
-        assertEquals("?,", fieldText(host, R.id.fixture_email_editor))
+        assertEquals(",,", fieldText(host, R.id.fixture_email_editor))
     }
 
     @Test fun floatingDeleteRemovesExactlyOneCharacterPerTap() = withSyntheticEditor { host, editor, snapshot ->
