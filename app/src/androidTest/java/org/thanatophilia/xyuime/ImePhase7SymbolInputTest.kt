@@ -263,8 +263,11 @@ class ImePhase7SymbolInputTest {
         }
         assertNotNull("Covered ellipsis must become reachable after scrolling",
             device.findObject(By.desc("省略号").pkg(pkg)))
-        tapDescription("省略号")
-        awaitSnapshot(snapshot, "A scrolled-into-view symbol must be tappable") {
+        val ellipsis = requireNotNull(device.findObject(By.desc("省略号").pkg(pkg)))
+        val ellipsisBounds = ellipsis.visibleBounds
+        ellipsis.click()
+        device.waitForIdle()
+        awaitSnapshot(snapshot, "Visible ellipsis must be tappable at its scrolled location $ellipsisBounds") {
             it.text == "…" && it.composing == null
         }
     }
