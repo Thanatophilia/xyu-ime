@@ -17,6 +17,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.semantics.selected
 import kotlin.math.ceil
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -159,6 +160,8 @@ data class KeyboardUiState(
     val numberKind: String = "number",
     /** ASCII-only editor: the symbol page opens on the English group instead of Chinese punctuation. */
     val symbolAscii: Boolean = false,
+    /** Most-recently-used symbol texts for the "最近" symbol group, newest first. */
+    val recentSymbols: List<String> = emptyList(),
     val chinese: Boolean = false,
     val preedit: String = "",
     val candidates: List<String> = emptyList(),
@@ -216,6 +219,8 @@ enum class CursorDirection { Left, Right, Up, Down, Home, End }
 private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
 /** D5 symbol grid: eight columns, matching the letter rows' rhythm. */
 private const val SYMBOL_COLUMNS = 8
+/** Category chips shown at once; the remaining groups scroll into view horizontally. */
+private const val VISIBLE_SYMBOL_TABS = 5
 
 
 private val XyuLightColors = lightColorScheme(
@@ -463,6 +468,7 @@ private fun KeyboardSurface(
 
                 KeyboardPage.Symbols -> SymbolsPagePanel(
                     pager = requireNotNull(symbolPager),
+                    recentSymbols = state.recentSymbols,
                     onAction = onAction,
                     fontScale = fontScale,
                     compactLandscape = compactLandscape,
@@ -890,6 +896,7 @@ private fun NumbersPanel(state: KeyboardUiState, onAction: (KeyboardAction) -> U
 @Composable
 private fun SymbolsPagePanel(
     pager: PagerState,
+    recentSymbols: List<String>,
     onAction: (KeyboardAction) -> Unit,
     fontScale: Float,
     compactLandscape: Boolean,
@@ -908,30 +915,43 @@ private fun SymbolsPagePanel(
         scope.launch { pager.animateScrollToPage(target, animationSpec = tween(220)) }
     }
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().height(tabHeight),
-            horizontalArrangement = Arrangement.spacedBy(gap)) {
-            SymbolLayout.groups.forEach { candidate ->
-                val isSelected = candidate == group
-                Box(Modifier.weight(1f).fillMaxHeight().clip(keyShape)
-                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surface)
-                    .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f), keyShape)
-                    .clickable { selectGroup(candidate) }
-                    .clearAndSetSemantics {
-                        testTagsAsResourceId = true
-                        testTag = "symbol_tab:${candidate.key}"
-                        selected = isSelected
-                        role = Role.Tab
-                        contentDescription = candidate.title
-                        stateDescription = if (isSelected) "当前" else "未选中"
-                        onClick { selectGroup(candidate); true }
-                    },
-                    contentAlignment = Alignment.Center) {
-                    Text(candidate.title, fontSize = adaptiveSp(12f, fontScale, 15f),
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Clip)
+        // Horizontal category strip: five chips visible, the remaining groups are reached
+        // by swiping the strip itself; the list also follows the swiped grid page.
+        BoxWithConstraints(Modifier.fillMaxWidth().height(tabHeight)) {
+            val chipWidth = (maxWidth - gap * (VISIBLE_SYMBOL_TABS - 1)) / VISIBLE_SYMBOL_TABS
+            val tabListState = rememberLazyListState()
+            val selectedIndex = SymbolLayout.groups.indexOf(group)
+            LaunchedEffect(selectedIndex) { tabListState.animateScrollToItem(selectedIndex) }
+            LazyRow(
+                state = tabListState,
+                modifier = Modifier.fillMaxSize().semantics {
+                    testTagsAsResourceId = true; testTag = "symbol_tab_bar"
+                },
+                horizontalArrangement = Arrangement.spacedBy(gap),
+            ) {
+                itemsIndexed(SymbolLayout.groups) { _, candidate ->
+                    val isSelected = candidate == group
+                    Box(Modifier.width(chipWidth).fillMaxHeight().clip(keyShape)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surface)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f), keyShape)
+                        .clickable { selectGroup(candidate) }
+                        .clearAndSetSemantics {
+                            testTagsAsResourceId = true
+                            testTag = "symbol_tab:${candidate.key}"
+                            selected = isSelected
+                            role = Role.Tab
+                            contentDescription = candidate.title
+                            stateDescription = if (isSelected) "当前" else "未选中"
+                            onClick { selectGroup(candidate); true }
+                        },
+                        contentAlignment = Alignment.Center) {
+                        Text(candidate.title, fontSize = adaptiveSp(12f, fontScale, 15f),
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Clip)
+                    }
                 }
             }
         }
@@ -947,10 +967,15 @@ private fun SymbolsPagePanel(
                     verticalAlignment = Alignment.Top,
                 ) { page ->
                     val displayedGroup = SymbolLayout.groupAtPage(page)
+                    val items = if (displayedGroup == SymbolGroup.Recent) {
+                        SymbolLayout.recentItems(recentSymbols)
+                    } else {
+                        SymbolLayout.items(displayedGroup)
+                    }
                     // Retained adjacent pages are visual only. Do not let an animating page
                     // insert symbols or remain focusable to TalkBack after the group changes.
                     val active = !pager.isScrollInProgress && page == pager.settledPage
-                    SymbolGridContent(displayedGroup, page == pager.settledPage, active,
+                    SymbolGridContent(displayedGroup, items, page == pager.settledPage, active,
                         keyHeight, keyShape, fontScale, gap, pager.settledPage, onAction)
                 }
             }
@@ -966,6 +991,7 @@ private fun SymbolsPagePanel(
 @Composable
 private fun SymbolGridContent(
     group: SymbolGroup,
+    items: List<SymbolItem>,
     settled: Boolean,
     active: Boolean,
     keyHeight: Dp,
@@ -975,18 +1001,26 @@ private fun SymbolGridContent(
     settledPage: Int,
     onAction: (KeyboardAction) -> Unit,
 ) {
-    val items = SymbolLayout.items(group)
+    val contentModifier = Modifier.fillMaxSize().semantics {
+        testTagsAsResourceId = true
+        testTag = "symbol_page:${group.key}"
+        if (!active) hideFromAccessibility()
+    }
+    if (items.isEmpty()) {
+        // The recent group starts empty until something is typed from the symbol page.
+        Box(contentModifier, contentAlignment = Alignment.Center) {
+            Text("还没有最近使用的符号", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = adaptiveSp(12f, fontScale, 15f))
+        }
+        return
+    }
     // Revisited categories still start at the top, as before; a vertical drag in the current
     // page keeps using this same LazyGridState and is independent of the horizontal pager.
     val gridState = remember(group, settledPage) { LazyGridState() }
     LazyVerticalGrid(
         columns = GridCells.Fixed(SYMBOL_COLUMNS),
         state = gridState,
-        modifier = Modifier.fillMaxSize().semantics {
-            testTagsAsResourceId = true
-            testTag = "symbol_page:${group.key}"
-            if (!active) hideFromAccessibility()
-        },
+        modifier = contentModifier,
         contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
         verticalArrangement = Arrangement.spacedBy(gap),
         horizontalArrangement = Arrangement.spacedBy(gap),

@@ -62,6 +62,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
     override val viewModelStore = ViewModelStore()
 
     private var keyboardState by mutableStateOf(KeyboardUiState())
+    private val symbolRecent by lazy { SymbolRecentStore(this) }
     private var composeView: ComposeView? = null
     private val floatingPreedit by lazy { FloatingPreeditWindow(this, this, this, this) }
     private var toast: Toast? = null
@@ -88,8 +89,12 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
 
     private val chinese: Boolean get() = chinesePreferred && chineseAllowed && engineReady
 
-    private fun resetChinese(clearActions: Boolean = true) {
-        floatingPreedit.update("", false)
+    private fun recordRecentSymbol(text: String) {
+        if (keyboardState.page != KeyboardPage.Symbols || text.isEmpty()) return
+        keyboardState = keyboardState.copy(recentSymbols = symbolRecent.record(text))
+    }
+
+    private fun resetChinese(clearActions: Boolean = true) {        floatingPreedit.update("", false)
         chineseSession.invalidate()
         if (clearActions) actions.clear()
         expectedEditorSelections.clear()
@@ -287,6 +292,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             comma = if (ascii) "," else "，",
             period = if (ascii) "." else "。",
             symbolAscii = ascii,
+            recentSymbols = symbolRecent.list(),
             inputHint = if (EditorPolicy.isPassword(type)) "密码" else when (kind.name) {
                 "Email" -> "邮箱"; "Url" -> "网址"; "Phone" -> "电话"
                 "Integer", "SignedInteger" -> "数字"; "Decimal", "SignedDecimal" -> "小数"
@@ -313,6 +319,7 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
             editing = false,
             selecting = false,
             symbolAscii = EditorPolicy.asciiPunctuation(info?.inputType ?: currentInputEditorInfo?.inputType ?: 0),
+            recentSymbols = symbolRecent.list(),
         )
         configureChinese(info ?: currentInputEditorInfo)
         inputViewActive = true
@@ -504,9 +511,11 @@ class XyuImeService : InputMethodService(), LifecycleOwner, ViewModelStoreOwner,
                     }
                     if (value == "," || value == "，" || value == "." || value == "。") {
                         val punctuation = if (value == "," || value == "，") "，" else "。"
+                        recordRecentSymbol(punctuation)
                         if (composing) requestRime(4, after = { commitText(punctuation) }) else commitText(punctuation)
                         return
                     }
+                    recordRecentSymbol(value)
                     finishRaw { commitText(value) }; return
                 }
                 KeyboardAction.Space -> {

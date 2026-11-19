@@ -202,7 +202,7 @@ class ImePhase7SymbolInputTest {
         node("symbol_tab:cn")
         assertGroupSelected("symbol_tab:cn")
         assertNotNull("Group dots must appear in the info strip",
-            device.waitForFreshObject(By.text("● ○ ○ ○ 1/4").pkg(pkg), 3_000))
+            device.waitForFreshObject(By.text("○ ○ ● ○ ○ ○ ○ ○ 3/8").pkg(pkg), 3_000))
         tapDescription("顿号")
         tapDescription("书名号左")
         tapDescription("方头括号左")
@@ -247,7 +247,7 @@ class ImePhase7SymbolInputTest {
         tapDescription("乘")
         device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
         device.waitForIdle()
-        assertGroupSelected("symbol_tab:more")
+        assertGroupSelected("symbol_tab:arrows")
         tapDescription("上箭头")
         awaitSnapshot(snapshot, "Swipe-selected groups must insert exact math and extended characters") {
             it.text == ":×↑" && it.composing == null
@@ -306,6 +306,28 @@ class ImePhase7SymbolInputTest {
         assertTrue("Long press should delete multiple characters; actual=$afterHold", afterHold.text.length <= 4)
         SystemClock.sleep(400)
         assertEquals("Repeat must stop promptly after release", afterHold.text, snapshot().text)
+    }
+
+    @Test fun recentGroupRecordsNewestSymbolFirst() = withSyntheticEditor { host, editor, snapshot ->
+        tap("key:符号键盘")
+        node("symbol_tab:cn")
+        tapDescription("顿号")
+        tapDescription("书名号左")
+        tap("symbol_tab:recent")
+        device.waitForIdle()
+        freshTree()
+        val first = device.waitForFreshObject(By.res("symbol:recent:0").pkg(pkg), 5_000)
+        val second = device.waitForFreshObject(By.res("symbol:recent:1").pkg(pkg), 5_000)
+        requireNotNull(first) { "Recent group must show the last symbol" }
+        requireNotNull(second)
+        assertEquals("书名号左", first.contentDescription)
+        assertEquals("顿号", second.contentDescription)
+        // Tapping a recent entry inserts it again and keeps it at the front.
+        first.click()
+        device.waitForIdle()
+        awaitSnapshot(snapshot, "A recent entry must be insertable") {
+            it.text == "、《《" && it.composing == null
+        }
     }
 
 }

@@ -1,83 +1,92 @@
 package org.thanatophilia.xyuime.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** D5 symbol table: exact insert text, code points, and group navigation. */
 class SymbolLayoutTest {
     @Test fun groupsKeepExpectedSizesAndOrder() {
-        assertEquals(listOf(SymbolGroup.ChinesePunctuation, SymbolGroup.EnglishSymbols,
-            SymbolGroup.MathUnits, SymbolGroup.ExtendedSymbols), SymbolLayout.groups)
-        assertEquals(27, SymbolLayout.chinesePunctuation.size)
-        assertEquals(30, SymbolLayout.englishSymbols.size)
-        assertEquals(22, SymbolLayout.mathUnits.size)
-        assertEquals(93, SymbolLayout.extendedSymbols.size)
+        assertEquals(listOf(SymbolGroup.Common, SymbolGroup.Recent, SymbolGroup.ChinesePunctuation,
+            SymbolGroup.EnglishSymbols, SymbolGroup.MathUnits, SymbolGroup.Arrows,
+            SymbolGroup.Ordinal, SymbolGroup.Scripts), SymbolLayout.groups)
+        assertEquals(35, SymbolLayout.commonSymbols.size)
+        assertEquals(33, SymbolLayout.chinesePunctuation.size)
+        assertEquals(52, SymbolLayout.englishSymbols.size)
+        assertEquals(59, SymbolLayout.mathUnits.size)
+        assertEquals(18, SymbolLayout.arrows.size)
+        assertEquals(30, SymbolLayout.ordinal.size)
+        assertEquals(31, SymbolLayout.scripts.size)
+        // The recent group is runtime data, not a static list.
+        assertTrue(SymbolLayout.items(SymbolGroup.Recent).isEmpty())
     }
 
-    @Test fun everyGroupIsDuplicateFreeAndFullyNamed() {
-        SymbolLayout.groups.forEach { group ->
+    @Test fun everyStaticGroupHasUniqueCharactersAndNames() {
+        SymbolLayout.groups.filter { it != SymbolGroup.Recent }.forEach { group ->
             val items = SymbolLayout.items(group)
-            assertEquals("$group must not repeat characters", items.size, items.map { it.text }.toSet().size)
-            assertTrue("$group must name every key", items.all { it.name.isNotBlank() })
+            assertEquals("${group.key} has duplicate characters", items.size, items.map { it.text }.toSet().size)
+            items.forEach { item -> assertTrue("${item.text} needs a name", item.name.isNotBlank()) }
         }
     }
 
     @Test fun criticalCharactersUseTheirExactCodePoints() {
         val all = SymbolLayout.groups.flatMap { SymbolLayout.items(it) }.associateBy { it.text }
         fun codeOf(text: String) = all.getValue(text).text.codePointAt(0)
-        assertEquals(0x00D7, codeOf("×")) // multiplication sign, not letter x
-        assertEquals(0x00F7, codeOf("÷")) // division sign, not slash
-        assertEquals(0x2212, codeOf("−")) // minus sign, not ASCII hyphen
-        assertEquals(0x2026, codeOf("…")) // horizontal ellipsis, not three periods
-        assertEquals(0x2014, codeOf("—")) // em dash
-        assertEquals(0x3001, codeOf("、")) // enumeration comma
-        assertEquals(0xFF5E, codeOf("～")) // full-width tilde in the Chinese group
+        assertEquals(0x00D7, codeOf("×"))
+        assertEquals(0x00F7, codeOf("÷"))
+        assertEquals(0x2212, codeOf("−"))
+        assertEquals(0x2026, codeOf("…"))
+        assertEquals(0x2014, codeOf("—"))
+        assertEquals(0x3001, codeOf("、"))
+        assertEquals(0xFF5E, codeOf("～"))
     }
 
-    @Test fun englishGroupStaysPureAsciiAndIncludesMissingPunctuation() {
-        val expected = listOf(':', ';', '<', '>')
-        expected.forEach { char -> assertTrue("ASCII $char must be available", SymbolLayout.englishSymbols.any { it.text == char.toString() }) }
-        // Comma and period deliberately stay out: Chinese mode routes them through the
-        // candidate-first punctuation path, so a symbol-page label would misstate the result.
-        listOf(',', '.').forEach { char ->
-            assertTrue("ASCII $char must stay on the bottom row", SymbolLayout.englishSymbols.none { it.text == char.toString() })
+    @Test fun englishCoreStaysAsciiAndCommaPeriodStayOnTheBottomRow() {
+        val en = SymbolLayout.englishSymbols.map { it.text }.toSet()
+        listOf("!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "-", "_", "=", "+", "/", "\\",
+            "'", "\"", ":", ";", "<", ">", "?", "~", "{", "}", "[", "]", "|", "`").forEach {
+            assertTrue("English group should contain $it", it in en)
         }
-        SymbolLayout.englishSymbols.forEach { item ->
-            val code = item.text.single().code
-            assertTrue("${item.text} must be printable ASCII", code in 0x20..0x7E)
+        listOf(",", ".").forEach {
+            assertTrue("$it must stay on the context-aware bottom row", it !in en)
         }
     }
 
-    @Test fun extendedGroupContainsResearchDrivenDailyCategories() {
-        val text = SymbolLayout.extendedSymbols.map { it.text }.toSet()
-        listOf("→", "↔", "α", "Ω", "∑", "∫", "∈", "½", "¹", "₁", "₹", "₩", "©", "№", "♫").forEach {
-            assertTrue("Extended group should contain $it", it in text)
-        }
+    @Test fun specializedGroupsContainTheirRepresentativeCharacters() {
+        val cn = SymbolLayout.chinesePunctuation.map { it.text }.toSet()
+        listOf("、", "《", "。", "※", "〇").forEach { assertTrue("Chinese group should contain $it", it in cn) }
+        val math = SymbolLayout.mathUnits.map { it.text }.toSet()
+        listOf("≠", "π", "Ω", "∑", "∈", "½", "₹").forEach { assertTrue("Math group should contain $it", it in math) }
+        val arrows = SymbolLayout.arrows.map { it.text }.toSet()
+        listOf("↑", "→", "↔", "⇨").forEach { assertTrue("Arrow group should contain $it", it in arrows) }
+        val ordinal = SymbolLayout.ordinal.map { it.text }.toSet()
+        listOf("①", "⑩", "⑴", "㈠").forEach { assertTrue("Ordinal group should contain $it", it in ordinal) }
+        val scripts = SymbolLayout.scripts.map { it.text }.toSet()
+        listOf("²", "ⁿ", "₀", "₎").forEach { assertTrue("Script group should contain $it", it in scripts) }
     }
 
-    @Test fun chineseGroupIsNonAsciiPunctuationOnly() {
-        SymbolLayout.chinesePunctuation.forEach { item ->
-            assertTrue("${item.text} must not be a plain ASCII letter/digit", item.text.single().code > 0x7F)
-        }
+    @Test fun recentItemsMapToNamesAndUnknownCharactersFallBackToThemselves() {
+        val items = SymbolLayout.recentItems(listOf("、", "↑", "?"))
+        assertEquals("顿号", items[0].name)
+        assertEquals("上箭头", items[1].name)
+        assertEquals("?", items[2].text)
+        assertNotEquals("", SymbolLayout.nameOf("·"))
     }
 
     @Test fun initialGroupFollowsEditorType() {
-        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.initialGroup(asciiEditor = false))
+        assertEquals(SymbolGroup.Common, SymbolLayout.initialGroup(asciiEditor = false))
         assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.initialGroup(asciiEditor = true))
     }
 
-    @Test fun swipeNavigationWrapsBothWays() {
-        val page = SymbolLayout.middlePage(SymbolGroup.ChinesePunctuation)
+    @Test fun swipeNavigationWrapsBothWaysForAllGroups() {
+        val page = SymbolLayout.middlePage(SymbolGroup.Common)
         SymbolLayout.groups.forEachIndexed { index, group ->
             assertEquals(group, SymbolLayout.groupAtPage(page + index))
             val previous = SymbolLayout.groups[(SymbolLayout.groups.size - index) % SymbolLayout.groups.size]
             assertEquals(previous, SymbolLayout.groupAtPage(page - index))
         }
-        assertEquals(SymbolGroup.ChinesePunctuation,
-            SymbolLayout.groupAtPage(page + SymbolLayout.groups.size))
-        assertEquals(SymbolGroup.ChinesePunctuation,
-            SymbolLayout.groupAtPage(page - SymbolLayout.groups.size))
+        assertEquals(SymbolGroup.Common, SymbolLayout.groupAtPage(page + SymbolLayout.groups.size))
+        assertEquals(SymbolGroup.Common, SymbolLayout.groupAtPage(page - SymbolLayout.groups.size))
         for (position in 0 until SymbolLayout.pageCount) {
             for (target in SymbolLayout.groups) {
                 val nearest = SymbolLayout.nearestPage(position, target)
