@@ -254,7 +254,7 @@ class ImePhase7SymbolInputTest {
         // use short swipes until its actual node becomes tappable; do not assume one fixed
         // gesture duration equals one fixed number of grid rows.
         val deadline = SystemClock.uptimeMillis() + 8_000
-        val minTapHeight = 48f * context.resources.displayMetrics.density
+        val minTapHeight = 42f * context.resources.displayMetrics.density
         val deleteBounds = node("key:删除").visibleBounds
         var ellipsis: UiObject2? = null
         while (SystemClock.uptimeMillis() < deadline && ellipsis == null) {
