@@ -128,14 +128,13 @@ class KeyboardSymbolPageTest {
         rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
     }
 
-    @Test fun verticalGridFollowsFingerAndStopsAfterShortCoast() {
+    @Test fun verticalGridFollowsFingerAndUsesDefaultReleaseFling() {
         val actions = mutableListOf<KeyboardAction>()
         setKeyboard(ascii = false, actions)
         val page = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
         fun cellY(index: Int): Float = rule.onNodeWithTag("symbol:common:$index", useUnmergedTree = true)
             .fetchSemanticsNode().positionInRoot.y
         val rowStridePx = cellY(8) - cellY(0)
-        val maxCoastPx = with(rule.density) { 16.dp.toPx() }
         fun scrollY(): Float {
             val state = page.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
             val parts = state.removePrefix("scroll:").split(":")
@@ -152,16 +151,15 @@ class KeyboardSymbolPageTest {
             }
             rule.mainClock.advanceTimeByFrame()
             rule.mainClock.advanceTimeByFrame()
-            assertTrue("Vertical content must move before the finger is lifted", scrollY() > before + 1f)
+            assertTrue("Vertical content must move with the finger", scrollY() > before + 1f)
             page.performTouchInput { up() }
             val atRelease = scrollY()
-            rule.mainClock.advanceTimeBy(128)
+            rule.mainClock.advanceTimeBy(96)
+            val afterFling = scrollY()
+            assertTrue("The default release fling must continue moving the grid", afterFling > atRelease + 0.5f)
+            rule.mainClock.advanceTimeBy(500)
             val settled = scrollY()
-            val coast = settled - atRelease
-            assertTrue("Fast release must coast forward, but by no more than 16dp; moved $coast px",
-                coast > 0.5f && coast <= maxCoastPx + 2f)
-            rule.mainClock.advanceTimeBy(320)
-            assertEquals("No late motion once the short coast ends", settled, scrollY(), 0.5f)
+            assertTrue("Default fling should naturally decelerate", settled >= afterFling)
             rule.runOnIdle { assertTrue("Dragging must not insert or delete symbols", actions.isEmpty()) }
         } finally {
             rule.mainClock.autoAdvance = true

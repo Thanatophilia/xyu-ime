@@ -1021,14 +1021,10 @@ private fun SymbolGridContent(
     }
     // Revisited categories still start at the top, as before; a vertical drag in the current
     // page keeps using this same LazyGridState and is independent of the horizontal pager.
-    val maxCoastPx = with(LocalDensity.current) { SYMBOL_VERTICAL_MAX_COAST_DP.dp.toPx() }
-    val gentleFling = remember(maxCoastPx) { GentleSymbolFlingBehavior(maxCoastPx) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(SYMBOL_COLUMNS),
         state = gridState,
         modifier = contentModifier,
-        flingBehavior = gentleFling,
-        overscrollEffect = null, // No stretch or spring-back at either end of the symbol grid.
         contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
         verticalArrangement = Arrangement.spacedBy(gap),
         horizontalArrangement = Arrangement.spacedBy(gap),
