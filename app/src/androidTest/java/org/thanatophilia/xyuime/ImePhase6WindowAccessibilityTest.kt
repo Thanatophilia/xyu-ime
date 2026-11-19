@@ -229,6 +229,9 @@ class ImePhase6WindowAccessibilityTest {
 
     @Test fun dragOffKeyCancelsWithoutInserting() = withImeEditor(EditorFixtureActivity.FIXTURE_NATIVE) { host ->
         val field = host.findViewById<EditText>(R.id.fixture_native_editor)
+        requireNotNull(device.waitForFreshObject(By.res("$pkg:id/fixture_native_editor").pkg(pkg), 10_000))
+            .click()
+        device.waitForIdle()
         instrumentation.runOnMainSync {
             field.requestFocus()
             host.getSystemService(InputMethodManager::class.java).showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
