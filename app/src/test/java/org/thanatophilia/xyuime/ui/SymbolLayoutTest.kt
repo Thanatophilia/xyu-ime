@@ -10,7 +10,7 @@ class SymbolLayoutTest {
         assertEquals(listOf(SymbolGroup.ChinesePunctuation, SymbolGroup.EnglishSymbols,
             SymbolGroup.MathUnits, SymbolGroup.ExtendedSymbols), SymbolLayout.groups)
         assertEquals(27, SymbolLayout.chinesePunctuation.size)
-        assertEquals(32, SymbolLayout.englishSymbols.size)
+        assertEquals(30, SymbolLayout.englishSymbols.size)
         assertEquals(22, SymbolLayout.mathUnits.size)
         assertEquals(93, SymbolLayout.extendedSymbols.size)
     }
@@ -36,8 +36,13 @@ class SymbolLayoutTest {
     }
 
     @Test fun englishGroupStaysPureAsciiAndIncludesMissingPunctuation() {
-        val expected = listOf(',', '.', ':', ';', '<', '>')
+        val expected = listOf(':', ';', '<', '>')
         expected.forEach { char -> assertTrue("ASCII $char must be available", SymbolLayout.englishSymbols.any { it.text == char.toString() }) }
+        // Comma and period deliberately stay out: Chinese mode routes them through the
+        // candidate-first punctuation path, so a symbol-page label would misstate the result.
+        listOf(',', '.').forEach { char ->
+            assertTrue("ASCII $char must stay on the bottom row", SymbolLayout.englishSymbols.none { it.text == char.toString() })
+        }
         SymbolLayout.englishSymbols.forEach { item ->
             val code = item.text.single().code
             assertTrue("${item.text} must be printable ASCII", code in 0x20..0x7E)

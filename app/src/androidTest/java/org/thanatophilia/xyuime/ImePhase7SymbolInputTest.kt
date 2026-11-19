@@ -250,7 +250,7 @@ class ImePhase7SymbolInputTest {
         assertGroupSelected("symbol_tab:more")
         tapDescription("上箭头")
         awaitSnapshot(snapshot, "Swipe-selected groups must insert exact math and extended characters") {
-            it.text == ",×↑" && it.composing == null
+            it.text == ":×↑" && it.composing == null
         }
     }
 
@@ -275,7 +275,7 @@ class ImePhase7SymbolInputTest {
         tap("symbol_tab:cn")
         device.waitForIdle()
         tapDescription("顿号")
-        assertEquals(",,", fieldText(host, R.id.fixture_email_editor))
+        assertEquals(":,", fieldText(host, R.id.fixture_email_editor))
     }
 
     @Test fun floatingDeleteRemovesExactlyOneCharacterPerTap() = withSyntheticEditor { host, editor, snapshot ->

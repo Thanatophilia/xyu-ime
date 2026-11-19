@@ -31,8 +31,8 @@ internal object SymbolLayout {
         SymbolItem("—", "破折号"), SymbolItem("～", "波浪号"), SymbolItem("·", "间隔号"),
     )
 
-    /** 32 printable ASCII symbols; comma/period/colon/semicolon/angle brackets were added so
-     * the group covers the everyday ASCII set instead of relying on the bottom row.
+    /** 30 printable ASCII symbols. Comma and period stay on the bottom row because Chinese
+     * mode routes them through the candidate-first punctuation path.
      */
     val englishSymbols = listOf(
         SymbolItem("!", "叹号"), SymbolItem("@", "at 符号"), SymbolItem("#", "井号"),
