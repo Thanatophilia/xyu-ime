@@ -1021,6 +1021,11 @@ private fun SymbolGridContent(
     val contentModifier = Modifier.fillMaxSize().semantics {
         testTagsAsResourceId = true
         testTag = "symbol_page:${group.key}"
+        if (org.thanatophilia.xyuime.BuildConfig.DEBUG) {
+            // Debug-only scroll diagnostics let gesture tests observe inertia without logging
+            // symbols, order, or user text in production.
+            stateDescription = "scroll:${gridState.firstVisibleItemIndex}:${gridState.firstVisibleItemScrollOffset}"
+        }
         if (!active) hideFromAccessibility()
     }
     if (items.isEmpty()) {

@@ -129,8 +129,14 @@ class KeyboardSymbolPageTest {
 
     @Test fun verticalGridKeepsReducedFlingAfterRelease() {
         setKeyboard(ascii = false, actions = mutableListOf())
-        fun probeY(): Float = rule.onNodeWithTag("symbol:common:8", useUnmergedTree = true)
-            .fetchSemanticsNode().positionInRoot.y
+        fun probeY(): Int {
+            val node = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).fetchSemanticsNode()
+            val state = node.config.getOrNull(SemanticsProperties.StateDescription)
+                ?: error("Missing symbol grid scroll diagnostic")
+            val parts = state.removePrefix("scroll:").split(":")
+            check(parts.size == 2)
+            return parts[0].toInt() * 1_000_000 + parts[1].toInt()
+        }
         val before = probeY()
         rule.mainClock.autoAdvance = false
         try {
@@ -144,10 +150,10 @@ class KeyboardSymbolPageTest {
             assertTrue("Vertical drag must move content with the finger", atRelease != before)
             rule.mainClock.advanceTimeBy(100)
             val afterCoast = probeY()
-            assertTrue("A quick release should retain a small, reduced coast", abs(afterCoast - atRelease) > 0.5f)
+            assertTrue("A quick release should retain a small, reduced coast", abs(afterCoast - atRelease) > 0)
             rule.mainClock.advanceTimeBy(350)
             val settled = probeY()
-            assertTrue("The reduced fling should settle after its short coast", abs(settled - afterCoast) < abs(afterCoast - atRelease) + 1f)
+            assertTrue("The reduced fling should settle after its short coast", abs(settled - afterCoast) <= abs(afterCoast - atRelease) + 1)
         } finally {
             rule.mainClock.autoAdvance = true
             rule.mainClock.advanceTimeBy(500)
