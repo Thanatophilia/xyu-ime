@@ -266,13 +266,14 @@ class ImePhase7SymbolInputTest {
                     covered = candidate
                     break
                 }
+            }
             val grid = node("symbol_page:common").visibleBounds
             // Move by only a fraction of a row so restored fling cannot skip the target cell.
             device.swipe(grid.centerX(), grid.centerY(), grid.centerX(), grid.centerY() - 35, 360)
             device.waitForIdle()
             SystemClock.sleep(120)
         }
-        val target = requireNotNull(covered) { "Covered star never reached a safe tap area; samples=$scrollSamples delete=$deleteBounds" }
+        val target = requireNotNull(covered) { "Covered star never reached a safe tap area; delete=$deleteBounds" }
         target.click()
         device.waitForIdle()
         awaitSnapshot(snapshot, "The symbol under the delete overlay must be tappable after scrolling") {
