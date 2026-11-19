@@ -270,7 +270,7 @@ class ImePhase7SymbolInputTest {
         tap("key:符号键盘")
         assertGroupSelected("symbol_tab:en")
         tapDescription("半角冒号")
-        assertEquals(",", fieldText(host, R.id.fixture_email_editor))
+        assertEquals(":", fieldText(host, R.id.fixture_email_editor))
         // Manually browsing back to Chinese punctuation must still reach an email-safe string.
         tap("symbol_tab:cn")
         device.waitForIdle()
