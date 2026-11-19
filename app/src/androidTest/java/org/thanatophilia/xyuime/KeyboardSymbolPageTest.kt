@@ -129,8 +129,9 @@ class KeyboardSymbolPageTest {
 
     @Test fun verticalGridStopsImmediatelyAfterReleaseWithoutInertia() {
         setKeyboard(ascii = false, actions = mutableListOf())
-        val before = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
+        fun probeY(): Float = rule.onNodeWithTag("symbol:common:8", useUnmergedTree = true)
             .fetchSemanticsNode().positionInRoot.y
+        val before = probeY()
         rule.mainClock.autoAdvance = false
         try {
             rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).performTouchInput {
@@ -140,12 +141,10 @@ class KeyboardSymbolPageTest {
                 up()
             }
             rule.mainClock.advanceTimeBy(120)
-            val afterRelease = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
-                .fetchSemanticsNode().positionInRoot.y
+            val afterRelease = probeY()
             assertTrue("Vertical drag must move the content with the finger", afterRelease != before)
             rule.mainClock.advanceTimeBy(500)
-            val settled = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
-                .fetchSemanticsNode().positionInRoot.y
+            val settled = probeY()
             assertEquals("Vertical content must not keep drifting after release", afterRelease, settled, 0.5f)
         } finally {
             rule.mainClock.autoAdvance = true
