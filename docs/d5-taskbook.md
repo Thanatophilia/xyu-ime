@@ -133,4 +133,14 @@
 - 删除行为：一格浮层复用通用重复删除键；物理触摸层负责命中区内按下、长按连删和拖出/取消停止，语义点击用于 TalkBack。定向测试覆盖文末光标单击、长按和抬手停止；文首 Backspace 不删除属于正确编辑行为。
 - 测试：`SymbolLayoutTest` 7 项（含循环页/最近分类页索引）；Compose `KeyboardSymbolPageTest` 5 项（含跟手中间帧、固定删除位置、循环/纵滚无误输入）；真实 IME `ImePhase7SymbolInputTest` 7 项覆盖组合态、ASCII、滚动可达及单击/长按删除。
 - **最终验收版：0.3.106**（代码 `1d50bc8`，Actions #106）：重点定向22项及 app72 + Rime6 项 Android 全量回归通过，0 failures / 0 errors / 0 skipped；Lint 0 errors；签名/双 ABI/16 KB 静态校验通过。用户 2026-11-19 实测键面居中和左右跟手后确认“还不错，测试没问题”，D5 实机验收通过。
-- 验收清单见 `docs/acceptance-d5.md`。D5 工作范围已完成，后续按 `docs/roadmap.md` 转入 D6（升级数据与部署恢复）规划。
+- 验收清单见 `docs/acceptance-d5.md`。D5 工作范围已完成；D5.1 符号扩充见下节。
+
+## 十、D5.1 符号扩充（2026-11-19，待实机）
+
+用户实机后反馈“符号太少、日常不够”，D6 暂停，先做符号扩充。调研 FlorisBoard / HeliBoard / OpenBoard / AnySoftKeyboard / Fcitx5 Android 的符号页实现后，采用“前三组保持、新增扩展组”的分层方案，不做长按弹层、最近使用和自定义排序。
+
+- 分组：中文标点 27 / 英文符号 30 / 数学单位 22 / 扩展符号 93；扩展组覆盖箭头、希腊字母、扩展数学、分数上下标、地区货币、引号变体、CJK 常用符号、出版标记、图形与音乐符号。
+- 英文组补入 `: ; < >`；逗号、句号不进符号组，因为它们在中文与 ASCII 输入框走独立路径，键面会与实际插入不一致。
+- 交互保持 0.3.106：8 列网格、上下滚动、左右跟手分页、松手吸附、双向循环、一格删除浮层、信息条圆点、底栏 ABC。
+- 测试：`SymbolLayoutTest` 8 项、Compose `KeyboardSymbolPageTest` 5 项、真实 IME `ImePhase7SymbolInputTest` 7 项；app 72 + Rime 6 全量回归 0 失败。
+- **交付版本：0.3.112（代码 `9401c77`，Actions #112）**；实机验收见 `docs/acceptance-symbol-expansion.md`。通过后恢复 D6 覆盖升级与恢复专项。
