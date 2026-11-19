@@ -48,10 +48,10 @@ class KeyboardSymbolPageTest {
         setKeyboard(ascii = false, actions = mutableListOf())
         rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
         rule.onNodeWithTag("symbol_tab:cn").assertContentDescriptionEquals("中文标点")
-        rule.onNodeWithText("● ○ ○ 1/3").assertExists()
+        rule.onNodeWithText("● ○ ○ ○ 1/4").assertExists()
         rule.onNodeWithTag("symbol_group_indicator")
-            .assertContentDescriptionEquals("符号分组 中文标点，第 1 组，共 3 组")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1/3"))
+            .assertContentDescriptionEquals("符号分组 中文标点，第 1 组，共 4 组")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "1/4"))
         // The first three grid rows (24 cells) are fully visible: three complete rows.
         val grid = rule.onNodeWithTag("symbol_grid").fetchSemanticsNode().boundsInRoot
         val tolerance = 2f
@@ -89,9 +89,12 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_tab:math").performClick()
         rule.onNodeWithTag("symbol:math:2").assertContentDescriptionEquals("乘")
         rule.onNodeWithTag("symbol:math:2").performClick()
+        rule.onNodeWithTag("symbol_tab:more").performClick()
+        rule.onNodeWithTag("symbol:more:10").assertContentDescriptionEquals("小写阿尔法")
+        rule.onNodeWithTag("symbol:more:10").performClick()
         rule.onNodeWithTag("key:删除").performClick()
         rule.runOnIdle {
-            assertEquals(listOf("、", "!", "×").map { KeyboardAction.Text(it) } + KeyboardAction.Backspace, actions)
+            assertEquals(listOf("、", "!", "×", "α").map { KeyboardAction.Text(it) } + KeyboardAction.Backspace, actions)
         }
     }
 
@@ -107,7 +110,11 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
         rule.onNodeWithTag("symbol_tab:math").assertIsSelected()
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
+        rule.onNodeWithTag("symbol_tab:more").assertIsSelected()
+        rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
         rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
+        rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
+        rule.onNodeWithTag("symbol_tab:more").assertIsSelected()
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
         rule.onNodeWithTag("symbol_tab:math").assertIsSelected()
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
@@ -162,6 +169,8 @@ class KeyboardSymbolPageTest {
         setKeyboard(ascii = true, actions = mutableListOf())
         rule.onNodeWithTag("symbol_tab:en").assertIsSelected()
         rule.onNodeWithTag("symbol:en:0").assertContentDescriptionEquals("叹号")
+        rule.onNodeWithTag("symbol_tab:more").performClick()
+        rule.onNodeWithTag("symbol:more:10").assertContentDescriptionEquals("小写阿尔法")
         rule.onNodeWithTag("symbol_tab:cn").performClick()
         rule.onNodeWithTag("symbol_tab:cn").assertIsSelected()
     }

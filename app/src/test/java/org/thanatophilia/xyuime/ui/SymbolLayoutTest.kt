@@ -7,11 +7,12 @@ import org.junit.Test
 /** D5 symbol table: exact insert text, code points, and group navigation. */
 class SymbolLayoutTest {
     @Test fun groupsKeepExpectedSizesAndOrder() {
-        assertEquals(listOf(SymbolGroup.ChinesePunctuation, SymbolGroup.EnglishSymbols, SymbolGroup.MathUnits),
-            SymbolLayout.groups)
+        assertEquals(listOf(SymbolGroup.ChinesePunctuation, SymbolGroup.EnglishSymbols,
+            SymbolGroup.MathUnits, SymbolGroup.ExtendedSymbols), SymbolLayout.groups)
         assertEquals(27, SymbolLayout.chinesePunctuation.size)
-        assertEquals(26, SymbolLayout.englishSymbols.size)
+        assertEquals(32, SymbolLayout.englishSymbols.size)
         assertEquals(22, SymbolLayout.mathUnits.size)
+        assertEquals(93, SymbolLayout.extendedSymbols.size)
     }
 
     @Test fun everyGroupIsDuplicateFreeAndFullyNamed() {
@@ -34,10 +35,19 @@ class SymbolLayoutTest {
         assertEquals(0xFF5E, codeOf("～")) // full-width tilde in the Chinese group
     }
 
-    @Test fun englishGroupStaysPureAscii() {
+    @Test fun englishGroupStaysPureAsciiAndIncludesMissingPunctuation() {
+        val expected = listOf(',', '.', ':', ';', '<', '>')
+        expected.forEach { char -> assertTrue("ASCII $char must be available", SymbolLayout.englishSymbols.any { it.text == char.toString() }) }
         SymbolLayout.englishSymbols.forEach { item ->
             val code = item.text.single().code
             assertTrue("${item.text} must be printable ASCII", code in 0x20..0x7E)
+        }
+    }
+
+    @Test fun extendedGroupContainsResearchDrivenDailyCategories() {
+        val text = SymbolLayout.extendedSymbols.map { it.text }.toSet()
+        listOf("→", "↔", "α", "Ω", "∑", "∫", "∈", "½", "¹", "₁", "₹", "₩", "©", "№", "♫").forEach {
+            assertTrue("Extended group should contain $it", it in text)
         }
     }
 
@@ -54,12 +64,15 @@ class SymbolLayoutTest {
 
     @Test fun swipeNavigationWrapsBothWays() {
         val page = SymbolLayout.middlePage(SymbolGroup.ChinesePunctuation)
-        assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.groupAtPage(page + 1))
-        assertEquals(SymbolGroup.MathUnits, SymbolLayout.groupAtPage(page + 2))
-        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.groupAtPage(page + 3))
-        assertEquals(SymbolGroup.MathUnits, SymbolLayout.groupAtPage(page - 1))
-        assertEquals(SymbolGroup.EnglishSymbols, SymbolLayout.groupAtPage(page - 2))
-        assertEquals(SymbolGroup.ChinesePunctuation, SymbolLayout.groupAtPage(page - 3))
+        SymbolLayout.groups.forEachIndexed { index, group ->
+            assertEquals(group, SymbolLayout.groupAtPage(page + index))
+            val previous = SymbolLayout.groups[(SymbolLayout.groups.size - index) % SymbolLayout.groups.size]
+            assertEquals(previous, SymbolLayout.groupAtPage(page - index))
+        }
+        assertEquals(SymbolGroup.ChinesePunctuation,
+            SymbolLayout.groupAtPage(page + SymbolLayout.groups.size))
+        assertEquals(SymbolGroup.ChinesePunctuation,
+            SymbolLayout.groupAtPage(page - SymbolLayout.groups.size))
         for (position in 0 until SymbolLayout.pageCount) {
             for (target in SymbolLayout.groups) {
                 val nearest = SymbolLayout.nearestPage(position, target)

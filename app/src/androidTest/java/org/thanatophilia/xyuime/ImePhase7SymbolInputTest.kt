@@ -201,7 +201,7 @@ class ImePhase7SymbolInputTest {
         node("symbol_tab:cn")
         assertGroupSelected("symbol_tab:cn")
         assertNotNull("Group dots must appear in the info strip",
-            device.waitForFreshObject(By.text("● ○ ○ 1/3").pkg(pkg), 3_000))
+            device.waitForFreshObject(By.text("● ○ ○ ○ 1/4").pkg(pkg), 3_000))
         tapDescription("顿号")
         tapDescription("书名号左")
         tapDescription("方头括号左")
@@ -244,8 +244,12 @@ class ImePhase7SymbolInputTest {
         device.waitForIdle()
         assertGroupSelected("symbol_tab:math")
         tapDescription("乘")
-        awaitSnapshot(snapshot, "Swipe-selected groups must insert their exact characters") {
-            it.text == "?×" && it.composing == null
+        device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
+        device.waitForIdle()
+        assertGroupSelected("symbol_tab:more")
+        tapDescription("上箭头")
+        awaitSnapshot(snapshot, "Swipe-selected groups must insert exact math and extended characters") {
+            it.text == "?×↑" && it.composing == null
         }
     }
 

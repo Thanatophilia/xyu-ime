@@ -795,12 +795,12 @@ private fun InfoStrip(
         if (symbolGroup != null) {
             val index = SymbolLayout.groups.indexOf(symbolGroup)
             Text(
-                text = SymbolLayout.groups.indices.joinToString(" ") { if (it == index) "●" else "○" } + " ${index + 1}/3",
+                text = SymbolLayout.groups.indices.joinToString(" ") { if (it == index) "●" else "○" } + " ${index + 1}/${SymbolLayout.groups.size}",
                 modifier = Modifier.padding(horizontal = 8.dp).semantics {
                     testTagsAsResourceId = true
                     testTag = "symbol_group_indicator"
-                    contentDescription = "符号分组 ${symbolGroup.title}，第 ${index + 1} 组，共 3 组"
-                    stateDescription = "${index + 1}/3"
+                    contentDescription = "符号分组 ${symbolGroup.title}，第 ${index + 1} 组，共 ${SymbolLayout.groups.size} 组"
+                    stateDescription = "${index + 1}/${SymbolLayout.groups.size}"
                 },
                 color = colors.primary,
                 fontSize = adaptiveSp(10f, fontScale, 12f),
