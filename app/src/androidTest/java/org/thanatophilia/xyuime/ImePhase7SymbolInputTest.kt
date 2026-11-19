@@ -250,11 +250,19 @@ class ImePhase7SymbolInputTest {
     @Test fun scrollingRevealsTheCellCoveredByFloatingDelete() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
         tapSymbolTab("cn")
-        // 省略号 sits exactly under the floating delete key on the first screen; scrolling
-        // must move it out from under the overlay so it can be tapped.
-        val grid = node("symbol_page:cn").visibleBounds
-        device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 60)
-        device.waitForIdle()
+        // 省略号 starts under the one-cell delete overlay. With the restored native fling,
+        // use short swipes until its actual node becomes tappable; do not assume one fixed
+        // gesture duration equals one fixed number of grid rows.
+        val deadline = SystemClock.uptimeMillis() + 8_000
+        while (SystemClock.uptimeMillis() < deadline &&
+            device.findObject(By.desc("省略号").pkg(pkg)) == null) {
+            val grid = node("symbol_page:cn").visibleBounds
+            device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 120)
+            device.waitForIdle()
+            SystemClock.sleep(80)
+        }
+        assertNotNull("Covered ellipsis must become reachable after scrolling",
+            device.findObject(By.desc("省略号").pkg(pkg)))
         tapDescription("省略号")
         awaitSnapshot(snapshot, "A scrolled-into-view symbol must be tappable") {
             it.text == "…" && it.composing == null
