@@ -254,20 +254,29 @@ class ImePhase7SymbolInputTest {
         // use short swipes until its actual node becomes tappable; do not assume one fixed
         // gesture duration equals one fixed number of grid rows.
         val deadline = SystemClock.uptimeMillis() + 8_000
-        while (SystemClock.uptimeMillis() < deadline &&
-            device.findObject(By.desc("省略号").pkg(pkg)) == null) {
+        val minTapHeight = 48f * context.resources.displayMetrics.density
+        val deleteBounds = node("key:删除").visibleBounds
+        var ellipsis: UiObject2? = null
+        while (SystemClock.uptimeMillis() < deadline && ellipsis == null) {
+            freshTree()
+            val candidate = device.findObject(By.desc("省略号").pkg(pkg))
+            if (candidate != null) {
+                val bounds = candidate.visibleBounds
+                val centerX = bounds.centerX(); val centerY = bounds.centerY()
+                if (bounds.height() >= minTapHeight && !deleteBounds.contains(centerX, centerY)) {
+                    ellipsis = candidate
+                    break
+                }
+            }
             val grid = node("symbol_page:cn").visibleBounds
             device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 120)
             device.waitForIdle()
-            SystemClock.sleep(80)
+            SystemClock.sleep(60)
         }
-        assertNotNull("Covered ellipsis must become reachable after scrolling",
-            device.findObject(By.desc("省略号").pkg(pkg)))
-        val ellipsis = requireNotNull(device.findObject(By.desc("省略号").pkg(pkg)))
-        val ellipsisBounds = ellipsis.visibleBounds
-        ellipsis.click()
+        val target = requireNotNull(ellipsis) { "Covered ellipsis never reached a safe tap area" }
+        target.click()
         device.waitForIdle()
-        awaitSnapshot(snapshot, "Visible ellipsis must be tappable at its scrolled location $ellipsisBounds") {
+        awaitSnapshot(snapshot, "A fully visible scrolled symbol must be tappable") {
             it.text == "…" && it.composing == null
         }
     }
