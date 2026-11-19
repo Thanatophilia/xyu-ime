@@ -240,7 +240,7 @@ class ImePhase7SymbolInputTest {
         device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
         device.waitForIdle()
         assertGroupSelected("symbol_tab:en")
-        tapDescription("半角逗号")
+        tapDescription("半角冒号")
         device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
         device.waitForIdle()
         assertGroupSelected("symbol_tab:math")
@@ -269,7 +269,7 @@ class ImePhase7SymbolInputTest {
     @Test fun emailEditorDefaultsToEnglishGroupAndNormalizesFullWidth() = withEmailFixture { host, editor ->
         tap("key:符号键盘")
         assertGroupSelected("symbol_tab:en")
-        tapDescription("半角逗号")
+        tapDescription("半角冒号")
         assertEquals(",", fieldText(host, R.id.fixture_email_editor))
         // Manually browsing back to Chinese punctuation must still reach an email-safe string.
         tap("symbol_tab:cn")

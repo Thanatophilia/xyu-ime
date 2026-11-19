@@ -41,7 +41,6 @@ internal object SymbolLayout {
         SymbolItem(")", "右圆括号"), SymbolItem("-", "连字符"), SymbolItem("_", "下划线"),
         SymbolItem("=", "等号"), SymbolItem("+", "加号"), SymbolItem("/", "斜杠"),
         SymbolItem("\\", "反斜杠"), SymbolItem("'", "单引号"), SymbolItem("\"", "双引号"),
-        SymbolItem(",", "半角逗号"), SymbolItem(".", "半角句号"),
         SymbolItem(":", "半角冒号"), SymbolItem(";", "半角分号"),
         SymbolItem("<", "小于号"), SymbolItem(">", "大于号"),
         SymbolItem("?", "半角问号"), SymbolItem("~", "波浪线"),
