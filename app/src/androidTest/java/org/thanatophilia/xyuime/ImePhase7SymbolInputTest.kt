@@ -191,10 +191,14 @@ class ImePhase7SymbolInputTest {
     }
 
     private fun assertGroupSelected(tab: String) {
-        freshTree()
-        val tabNode = device.waitForFreshObject(By.res(tab).pkg(pkg), 5_000)
-        requireNotNull(tabNode) { "Missing tab $tab" }
-        assertTrue("$tab must be selected", tabNode.isSelected)
+        val titles = mapOf("common" to "常用", "recent" to "最近", "cn" to "中", "en" to "英",
+            "math" to "数", "arrows" to "箭头", "ordinal" to "序号", "marks" to "角标")
+        val key = tab.substringAfter("symbol_tab:")
+        val index = listOf("common", "recent", "cn", "en", "math", "arrows", "ordinal", "marks").indexOf(key) + 1
+        require(index > 0) { "Unknown symbol group: $tab" }
+        val description = "符号分组 ${titles.getValue(key)}，第 ${index} 组，共 8 组"
+        assertNotNull("Missing group state: $description",
+            device.waitForFreshObject(By.desc(description).pkg(pkg), 5_000))
     }
 
     /** Scrolls the five-visible chip strip until the requested group can be tapped. */

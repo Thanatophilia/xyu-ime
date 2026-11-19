@@ -116,12 +116,14 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeUp() }
         rule.onNodeWithTag("symbol_tab:common").assertIsSelected()
         val expected = listOf("recent", "cn", "en", "math", "arrows", "ordinal", "marks", "common")
-        expected.forEach { key ->
+        expected.forEachIndexed { index, _ ->
             rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
-            rule.onNodeWithTag("symbol_tab:$key").assertIsSelected()
+            rule.onNodeWithTag("symbol_group_indicator")
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "${index + 2}/8"))
         }
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
-        rule.onNodeWithTag("symbol_tab:marks").assertIsSelected()
+        rule.onNodeWithTag("symbol_group_indicator")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "7/8"))
         rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
     }
 
