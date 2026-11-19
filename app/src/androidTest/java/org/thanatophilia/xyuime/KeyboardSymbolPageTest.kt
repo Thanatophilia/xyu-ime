@@ -123,7 +123,7 @@ class KeyboardSymbolPageTest {
         }
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
         rule.onNodeWithTag("symbol_group_indicator")
-            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "7/8"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "8/8"))
         rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
     }
 
