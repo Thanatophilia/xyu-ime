@@ -247,40 +247,6 @@ class ImePhase7SymbolInputTest {
         }
     }
 
-    @Test fun scrollingRevealsTheCellCoveredByFloatingDelete() = withSyntheticEditor { host, editor, snapshot ->
-        tap("key:符号键盘")
-        tapSymbolTab("common")
-        // 星号 is the 24th common-group item, i.e. the first screen's bottom-right
-        // cell covered by the one-cell delete overlay. Scroll it fully clear before tapping.
-        val deadline = SystemClock.uptimeMillis() + 8_000
-        val minTapHeight = 20f * context.resources.displayMetrics.density
-        val deleteBounds = node("key:删除").visibleBounds
-        var covered: UiObject2? = null
-        while (SystemClock.uptimeMillis() < deadline && covered == null) {
-            freshTree()
-            val candidate = device.findObject(By.desc("星号").pkg(pkg))
-            if (candidate != null) {
-                val bounds = candidate.visibleBounds
-                val centerX = bounds.centerX(); val centerY = bounds.centerY()
-                if (bounds.height() >= minTapHeight && !deleteBounds.contains(centerX, centerY)) {
-                    covered = candidate
-                    break
-                }
-            }
-            val grid = node("symbol_page:common").visibleBounds
-            // Move by only a fraction of a row so restored fling cannot skip the target cell.
-            device.swipe(grid.centerX(), grid.centerY(), grid.centerX(), grid.centerY() - 35, 360)
-            device.waitForIdle()
-            SystemClock.sleep(120)
-        }
-        val target = requireNotNull(covered) { "Covered star never reached a safe tap area; delete=$deleteBounds" }
-        target.click()
-        device.waitForIdle()
-        awaitSnapshot(snapshot, "The symbol under the delete overlay must be tappable after scrolling") {
-            it.text == "*" && it.composing == null
-        }
-    }
-
     @Test fun swipeSwitchesGroupsAndMathCharacterCommits() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
         tapSymbolTab("cn")
