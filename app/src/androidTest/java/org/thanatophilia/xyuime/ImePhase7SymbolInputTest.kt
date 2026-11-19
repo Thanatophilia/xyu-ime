@@ -197,9 +197,33 @@ class ImePhase7SymbolInputTest {
         assertTrue("$tab must be selected", tabNode.isSelected)
     }
 
+    /** Scrolls the five-visible chip strip until the requested group can be tapped. */
+    private fun tapSymbolTab(key: String) {
+        repeat(6) { attempt ->
+            freshTree()
+            val target = device.findObject(By.res("symbol_tab:$key").pkg(pkg))
+            if (target != null) {
+                target.click()
+                device.waitForIdle()
+                return
+            }
+            val bar = device.findObject(By.res("symbol_tab_bar").pkg(pkg))
+            requireNotNull(bar) { "Missing symbol tab bar while looking for $key" }
+            val bounds = bar.visibleBounds
+            val y = bounds.centerY()
+            if (attempt % 2 == 0) {
+                device.swipe(bounds.left + 20, y, bounds.right - 20, y, 40)
+            } else {
+                device.swipe(bounds.right - 20, y, bounds.left + 20, y, 40)
+            }
+            device.waitForIdle()
+        }
+        error("Symbol tab not reachable: $key")
+    }
+
     @Test fun chineseGroupInsertsPunctuationAndReturnsToLetters() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
-        node("symbol_tab:cn")
+        tapSymbolTab("cn")
         assertGroupSelected("symbol_tab:cn")
         assertNotNull("Group dots must appear in the info strip",
             device.waitForFreshObject(By.text("○ ○ ● ○ ○ ○ ○ ○ 3/8").pkg(pkg), 3_000))
@@ -221,7 +245,7 @@ class ImePhase7SymbolInputTest {
 
     @Test fun scrollingRevealsTheCellCoveredByFloatingDelete() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
-        node("symbol_tab:cn")
+        tapSymbolTab("cn")
         // 省略号 sits exactly under the floating delete key on the first screen; scrolling
         // must move it out from under the overlay so it can be tapped.
         val grid = node("symbol_grid").visibleBounds
@@ -235,7 +259,7 @@ class ImePhase7SymbolInputTest {
 
     @Test fun swipeSwitchesGroupsAndMathCharacterCommits() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
-        node("symbol_tab:cn")
+        tapSymbolTab("cn")
         val grid = node("symbol_grid").visibleBounds
         device.swipe(grid.right - 20, grid.centerY(), grid.left + 20, grid.centerY(), 40)
         device.waitForIdle()
@@ -272,7 +296,7 @@ class ImePhase7SymbolInputTest {
         tapDescription("半角冒号")
         assertEquals(":", fieldText(host, R.id.fixture_email_editor))
         // Manually browsing back to Chinese punctuation must still reach an email-safe string.
-        tap("symbol_tab:cn")
+        tapSymbolTab("cn")
         device.waitForIdle()
         tapDescription("顿号")
         assertEquals(":,", fieldText(host, R.id.fixture_email_editor))
@@ -285,7 +309,7 @@ class ImePhase7SymbolInputTest {
             editor.setSelection(editor.text.length)
         }
         tap("key:符号键盘")
-        node("symbol_tab:cn")
+        tapSymbolTab("cn")
         SystemClock.sleep(400) // wait for the symbol grid and floating key to settle
         tap("key:删除")
         awaitSnapshot(snapshot, "One physical tap must delete one character") { it.text == "ab" }
@@ -299,7 +323,7 @@ class ImePhase7SymbolInputTest {
             editor.setSelection(editor.text.length)
         }
         tap("key:符号键盘")
-        node("symbol_tab:cn")
+        tapSymbolTab("cn")
         SystemClock.sleep(400)
         node("key:删除").longClick()
         val afterHold = snapshot()
@@ -310,10 +334,10 @@ class ImePhase7SymbolInputTest {
 
     @Test fun recentGroupRecordsNewestSymbolFirst() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
-        node("symbol_tab:cn")
+        tapSymbolTab("cn")
         tapDescription("顿号")
         tapDescription("书名号左")
-        tap("symbol_tab:recent")
+        tapSymbolTab("recent")
         device.waitForIdle()
         freshTree()
         val first = device.waitForFreshObject(By.res("symbol:recent:0").pkg(pkg), 5_000)
