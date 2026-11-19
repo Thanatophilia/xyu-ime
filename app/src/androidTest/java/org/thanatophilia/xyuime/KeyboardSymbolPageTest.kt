@@ -116,10 +116,10 @@ class KeyboardSymbolPageTest {
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeUp() }
         rule.onNodeWithTag("symbol_tab:common").assertIsSelected()
         val expected = listOf("recent", "cn", "en", "math", "arrows", "ordinal", "marks", "common")
-        expected.forEachIndexed { index, _ ->
+        listOf(2, 3, 4, 5, 6, 7, 8, 1).forEach { expectedIndex ->
             rule.onNodeWithTag("symbol_grid").performTouchInput { swipeLeft() }
             rule.onNodeWithTag("symbol_group_indicator")
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "${index + 2}/8"))
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "${expectedIndex}/8"))
         }
         rule.onNodeWithTag("symbol_grid").performTouchInput { swipeRight() }
         rule.onNodeWithTag("symbol_group_indicator")

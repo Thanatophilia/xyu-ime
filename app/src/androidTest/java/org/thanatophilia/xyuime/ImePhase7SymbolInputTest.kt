@@ -252,7 +252,7 @@ class ImePhase7SymbolInputTest {
         tapSymbolTab("cn")
         // 省略号 sits exactly under the floating delete key on the first screen; scrolling
         // must move it out from under the overlay so it can be tapped.
-        val grid = node("symbol_grid").visibleBounds
+        val grid = node("symbol_page:cn").visibleBounds
         device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 60)
         device.waitForIdle()
         tapDescription("省略号")
