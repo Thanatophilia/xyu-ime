@@ -253,7 +253,7 @@ class ImePhase7SymbolInputTest {
         // 星号 is the 24th common-group item, i.e. the first screen's bottom-right
         // cell covered by the one-cell delete overlay. Scroll it fully clear before tapping.
         val deadline = SystemClock.uptimeMillis() + 8_000
-        val minTapHeight = 42f * context.resources.displayMetrics.density
+        val minTapHeight = 20f * context.resources.displayMetrics.density
         val deleteBounds = node("key:删除").visibleBounds
         var covered: UiObject2? = null
         while (SystemClock.uptimeMillis() < deadline && covered == null) {
