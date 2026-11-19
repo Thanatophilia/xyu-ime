@@ -267,7 +267,7 @@ class ImePhase7SymbolInputTest {
                     break
                 }
             }
-            val grid = node("symbol_page:cn").visibleBounds
+            val grid = node("symbol_page:common").visibleBounds
             device.swipe(grid.centerX(), grid.bottom - 20, grid.centerX(), grid.top + 20, 120)
             device.waitForIdle()
             SystemClock.sleep(60)
