@@ -145,4 +145,11 @@
 - 测试：`SymbolLayoutTest` 8 项、Compose `KeyboardSymbolPageTest` 5 项、真实 IME `ImePhase7SymbolInputTest` 7 项；app 72 + Rime 6 全量回归 0 失败。
 - 用户随后要求“分类条点击不要自动把滑块划过去”。实现移除选中组的 `animateScrollToItem`；分类条仅响应手动横滑，点击分类和网格左右切组都保持其横向位置。D5.2（0.3.119）已记录此行为。
 - 用户本轮要求“惯性调小一点”。`SymbolGridContent` 使用平台 fling 曲线，但把松手初始用自定义 fling 曲线将滑行时间限制到约90ms、距离限制到最多16dp，保留短距离惯性；分类条手动横滑、横向 `HorizontalPager` 跟手/吸附不变。
-- **当前候选：0.3.127**，对应提交 `f3bb8b2`；CI app77 + Rime6 全量回归通过，包含惯性模拟测试（约90ms、最大16dp），及 Compose 竖向跟手、快速松手短暂滑动、随后停稳的测试。验收见 `docs/acceptance-symbol-expansion.md`。D6 保持暂停。
+- **当前候选：0.3.141**，对应提交 `d8d0c15`；CI app 76 + Rime 6 全量回归通过，包含 Compose 竖向拖动、松手后默认 fling 继续移动并自然衰减的测试。验收见 `docs/acceptance-symbol-expansion.md`。D6 保持暂停。
+
+## 十一、0.3.141 符号网格上下惯性恢复（2026-11-19）
+
+- 用户先要求关闭上下惯性，后反馈“还是改回来吧，但是惯性调小一点”。0.3.127 曾试过 90ms/16dp 短余滑，但体感仍不符合预期；0.3.141 移除该自定义曲线与边缘 overscroll 限制，恢复 Compose 默认 LazyVerticalGrid fling/回弹。
+- 仅符号网格上下滚动恢复默认；手指拖动、顶部分类条手动横滑、分类点击不自动滚动、左右 HorizontalPager 跟手及吸附不变。
+- 代码 `d8d0c15`，Actions #141 app76 + Rime6 全部通过；APK SHA256 `7eead5ff0eee7dbd8f610ae9552bafe0d481493088fe6b09c818b5f34945d063`。
+- 0.3.141 尚待用户实机复测上下惯性感受；D6 仍暂停。
