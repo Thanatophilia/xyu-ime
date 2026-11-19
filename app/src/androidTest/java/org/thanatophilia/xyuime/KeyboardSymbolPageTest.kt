@@ -7,6 +7,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -127,32 +128,41 @@ class KeyboardSymbolPageTest {
         rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
     }
 
-    @Test fun verticalGridKeepsReducedFlingAfterRelease() {
-        setKeyboard(ascii = false, actions = mutableListOf())
-        fun probeY(): Int {
-            val node = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).fetchSemanticsNode()
-            val state = node.config[SemanticsProperties.StateDescription]
+    @Test fun verticalGridFollowsFingerAndStopsAfterShortCoast() {
+        val actions = mutableListOf<KeyboardAction>()
+        setKeyboard(ascii = false, actions)
+        val page = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
+        fun cellY(index: Int): Float = rule.onNodeWithTag("symbol:common:$index", useUnmergedTree = true)
+            .fetchSemanticsNode().positionInRoot.y
+        val rowStridePx = cellY(8) - cellY(0)
+        val maxCoastPx = with(rule.density) { 16.dp.toPx() }
+        fun scrollY(): Float {
+            val state = page.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
             val parts = state.removePrefix("scroll:").split(":")
             check(parts.size == 2)
-            return parts[0].toInt() * 1_000_000 + parts[1].toInt()
+            return (parts[0].toInt() / 8) * rowStridePx + parts[1].toInt()
         }
-        val before = probeY()
+        val before = scrollY()
         rule.mainClock.autoAdvance = false
         try {
-            rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).performTouchInput {
+            page.performTouchInput {
                 down(Offset(width * .5f, height * .82f))
                 moveTo(Offset(width * .5f, height * .56f), delayMillis = 16)
                 moveTo(Offset(width * .5f, height * .28f), delayMillis = 16)
-                up()
             }
-            val atRelease = probeY()
-            assertTrue("Vertical drag must move content with the finger", atRelease != before)
-            rule.mainClock.advanceTimeBy(100)
-            val afterCoast = probeY()
-            assertTrue("A quick release should retain a small, reduced coast", abs(afterCoast - atRelease) > 0)
-            rule.mainClock.advanceTimeBy(350)
-            val settled = probeY()
-            assertTrue("The reduced fling should settle after its short coast", abs(settled - afterCoast) <= abs(afterCoast - atRelease) + 1)
+            rule.mainClock.advanceTimeByFrame()
+            rule.mainClock.advanceTimeByFrame()
+            assertTrue("Vertical content must move before the finger is lifted", scrollY() > before + 1f)
+            page.performTouchInput { up() }
+            val atRelease = scrollY()
+            rule.mainClock.advanceTimeBy(128)
+            val settled = scrollY()
+            val coast = settled - atRelease
+            assertTrue("Fast release must coast forward, but by no more than 16dp; moved $coast px",
+                coast > 0.5f && coast <= maxCoastPx + 2f)
+            rule.mainClock.advanceTimeBy(320)
+            assertEquals("No late motion once the short coast ends", settled, scrollY(), 0.5f)
+            rule.runOnIdle { assertTrue("Dragging must not insert or delete symbols", actions.isEmpty()) }
         } finally {
             rule.mainClock.autoAdvance = true
             rule.mainClock.advanceTimeBy(500)
