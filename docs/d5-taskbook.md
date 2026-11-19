@@ -143,4 +143,6 @@
 - 英文组补入 `: ; < >`；逗号、句号不进符号组，因为它们在中文与 ASCII 输入框走独立路径，键面会与实际插入不一致。
 - 交互保持 0.3.106：8 列网格、上下滚动、左右跟手分页、松手吸附、双向循环、一格删除浮层、信息条圆点、底栏 ABC。
 - 测试：`SymbolLayoutTest` 8 项、Compose `KeyboardSymbolPageTest` 5 项、真实 IME `ImePhase7SymbolInputTest` 7 项；app 72 + Rime 6 全量回归 0 失败。
-- **交付版本：0.3.112（代码 `9401c77`，Actions #112）**；实机验收见 `docs/acceptance-symbol-expansion.md`。通过后恢复 D6 覆盖升级与恢复专项。
+- 用户随后要求“分类条点击不要自动把滑块划过去”。实现移除选中组的 `animateScrollToItem`；分类条仅响应手动横滑，点击分类和网格左右切组都保持其横向位置。D5.2（0.3.119）已记录此行为。
+- 用户现要求“符号区上下滚动不要惯性”。只对 `SymbolGridContent` 的 `LazyVerticalGrid` 使用 `NoFlingBehavior`：手指拖动保持跟手，松手后不再继续 fling；顶部分类条手动横滑、横向 `HorizontalPager` 跟手/吸附不变。
+- **当前候选：0.3.121**，对应提交 `4e93bbf`；CI 回归通过，待确认分类手动滑动仍正常及竖向松手即停。验收见 `docs/acceptance-symbol-expansion.md`。D6 保持暂停。
