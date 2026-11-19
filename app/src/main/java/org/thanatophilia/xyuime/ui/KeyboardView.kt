@@ -920,8 +920,8 @@ private fun SymbolsPagePanel(
         BoxWithConstraints(Modifier.fillMaxWidth().height(tabHeight)) {
             val chipWidth = (maxWidth - gap * (VISIBLE_SYMBOL_TABS - 1)) / VISIBLE_SYMBOL_TABS
             val tabListState = rememberLazyListState()
-            val selectedIndex = SymbolLayout.groups.indexOf(group)
-            LaunchedEffect(selectedIndex) { tabListState.animateScrollToItem(selectedIndex) }
+            // The strip only moves when the user drags it; selecting a group must not
+            // auto-scroll chips to the front (kept deliberately scroll-free).
             LazyRow(
                 state = tabListState,
                 modifier = Modifier.fillMaxSize().semantics {
