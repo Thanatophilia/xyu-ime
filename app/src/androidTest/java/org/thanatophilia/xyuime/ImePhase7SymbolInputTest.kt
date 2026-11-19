@@ -250,21 +250,20 @@ class ImePhase7SymbolInputTest {
     @Test fun scrollingRevealsTheCellCoveredByFloatingDelete() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
         tapSymbolTab("cn")
-        // 省略号 starts under the one-cell delete overlay. With the restored native fling,
-        // use short swipes until its actual node becomes tappable; do not assume one fixed
-        // gesture duration equals one fixed number of grid rows.
+        // 星号 is the 24th common-group item, i.e. the first screen's bottom-right
+        // cell covered by the one-cell delete overlay. Scroll it fully clear before tapping.
         val deadline = SystemClock.uptimeMillis() + 8_000
         val minTapHeight = 42f * context.resources.displayMetrics.density
         val deleteBounds = node("key:删除").visibleBounds
-        var ellipsis: UiObject2? = null
-        while (SystemClock.uptimeMillis() < deadline && ellipsis == null) {
+        var covered: UiObject2? = null
+        while (SystemClock.uptimeMillis() < deadline && covered == null) {
             freshTree()
-            val candidate = device.findObject(By.desc("省略号").pkg(pkg))
+            val candidate = device.findObject(By.desc("星号").pkg(pkg))
             if (candidate != null) {
                 val bounds = candidate.visibleBounds
                 val centerX = bounds.centerX(); val centerY = bounds.centerY()
                 if (bounds.height() >= minTapHeight && !deleteBounds.contains(centerX, centerY)) {
-                    ellipsis = candidate
+                    covered = candidate
                     break
                 }
             }
@@ -273,11 +272,11 @@ class ImePhase7SymbolInputTest {
             device.waitForIdle()
             SystemClock.sleep(60)
         }
-        val target = requireNotNull(ellipsis) { "Covered ellipsis never reached a safe tap area" }
+        val target = requireNotNull(covered) { "Covered star never reached a safe tap area" }
         target.click()
         device.waitForIdle()
-        awaitSnapshot(snapshot, "A fully visible scrolled symbol must be tappable") {
-            it.text == "…" && it.composing == null
+        awaitSnapshot(snapshot, "The symbol under the delete overlay must be tappable after scrolling") {
+            it.text == "*" && it.composing == null
         }
     }
 
