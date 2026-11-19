@@ -249,7 +249,7 @@ class ImePhase7SymbolInputTest {
 
     @Test fun scrollingRevealsTheCellCoveredByFloatingDelete() = withSyntheticEditor { host, editor, snapshot ->
         tap("key:符号键盘")
-        tapSymbolTab("cn")
+        tapSymbolTab("common")
         // 星号 is the 24th common-group item, i.e. the first screen's bottom-right
         // cell covered by the one-cell delete overlay. Scroll it fully clear before tapping.
         val deadline = SystemClock.uptimeMillis() + 8_000
