@@ -41,6 +41,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -1021,10 +1022,12 @@ private fun SymbolGridContent(
     }
     // Revisited categories still start at the top, as before; a vertical drag in the current
     // page keeps using this same LazyGridState and is independent of the horizontal pager.
+    val platformFlingBehavior = ScrollableDefaults.flingBehavior()
     LazyVerticalGrid(
         columns = GridCells.Fixed(SYMBOL_COLUMNS),
         state = gridState,
         modifier = contentModifier,
+        flingBehavior = platformFlingBehavior,
         contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
         verticalArrangement = Arrangement.spacedBy(gap),
         horizontalArrangement = Arrangement.spacedBy(gap),
