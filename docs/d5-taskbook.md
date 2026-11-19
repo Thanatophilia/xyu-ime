@@ -144,5 +144,5 @@
 - 交互保持 0.3.106：8 列网格、上下滚动、左右跟手分页、松手吸附、双向循环、一格删除浮层、信息条圆点、底栏 ABC。
 - 测试：`SymbolLayoutTest` 8 项、Compose `KeyboardSymbolPageTest` 5 项、真实 IME `ImePhase7SymbolInputTest` 7 项；app 72 + Rime 6 全量回归 0 失败。
 - 用户随后要求“分类条点击不要自动把滑块划过去”。实现移除选中组的 `animateScrollToItem`；分类条仅响应手动横滑，点击分类和网格左右切组都保持其横向位置。D5.2（0.3.119）已记录此行为。
-- 用户本轮要求“惯性调小一点”。`SymbolGridContent` 使用平台 fling 曲线，但把松手初始速度缩为35%，保留短距离惯性；分类条手动横滑、横向 `HorizontalPager` 跟手/吸附不变。
-- **当前候选：0.3.126**，对应提交 `6fcf546`；CI app77 + Rime6 全量回归通过，包含精确验证 35% 放手速度比例的 JVM 测试、真实符号滚动仍会继续并停稳的 Compose 测试。验收见 `docs/acceptance-symbol-expansion.md`。D6 保持暂停。
+- 用户本轮要求“惯性调小一点”。`SymbolGridContent` 使用平台 fling 曲线，但把松手初始用自定义 fling 曲线将滑行时间限制到约90ms、距离限制到最多16dp，保留短距离惯性；分类条手动横滑、横向 `HorizontalPager` 跟手/吸附不变。
+- **当前候选：0.3.127**，对应提交 `f3bb8b2`；CI app77 + Rime6 全量回归通过，包含惯性模拟测试（约90ms、最大16dp），及 Compose 竖向跟手、快速松手短暂滑动、随后停稳的测试。验收见 `docs/acceptance-symbol-expansion.md`。D6 保持暂停。
