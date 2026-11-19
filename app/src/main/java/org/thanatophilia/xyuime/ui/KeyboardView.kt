@@ -1039,7 +1039,6 @@ private fun SymbolGridContent(
     }
     // Revisited categories still start at the top, as before; a vertical drag in the current
     // page keeps using this same LazyGridState and is independent of the horizontal pager.
-    val gridState = remember(group, settledPage) { LazyGridState() }
     val gentleFling = rememberGentleSymbolFlingBehavior()
     LazyVerticalGrid(
         columns = GridCells.Fixed(SYMBOL_COLUMNS),
