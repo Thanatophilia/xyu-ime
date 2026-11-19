@@ -131,8 +131,7 @@ class KeyboardSymbolPageTest {
         setKeyboard(ascii = false, actions = mutableListOf())
         fun probeY(): Int {
             val node = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).fetchSemanticsNode()
-            val state = node.config.getOrNull(SemanticsProperties.StateDescription)
-                ?: error("Missing symbol grid scroll diagnostic")
+            val state = node.config[SemanticsProperties.StateDescription]
             val parts = state.removePrefix("scroll:").split(":")
             check(parts.size == 2)
             return parts[0].toInt() * 1_000_000 + parts[1].toInt()
