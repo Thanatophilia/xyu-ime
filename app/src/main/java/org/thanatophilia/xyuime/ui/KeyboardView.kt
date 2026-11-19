@@ -1018,6 +1018,7 @@ private fun SymbolGridContent(
     settledPage: Int,
     onAction: (KeyboardAction) -> Unit,
 ) {
+    val gridState = remember(group, settledPage) { LazyGridState() }
     val contentModifier = Modifier.fillMaxSize().semantics {
         testTagsAsResourceId = true
         testTag = "symbol_page:${group.key}"
