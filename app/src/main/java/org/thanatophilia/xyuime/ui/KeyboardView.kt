@@ -41,6 +41,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -221,6 +223,11 @@ private const val BACKSPACE_REPEAT_DELAY_MILLIS = 58L
 private const val SYMBOL_COLUMNS = 8
 /** Category chips shown at once; the remaining groups scroll into view horizontally. */
 private const val VISIBLE_SYMBOL_TABS = 5
+
+/** A vertical drag follows the finger; release leaves no residual inertial motion. */
+private object NoFlingBehavior : FlingBehavior {
+    override suspend fun ScrollScope.performFling(initialVelocity: Float): Float = 0f
+}
 
 
 private val XyuLightColors = lightColorScheme(
@@ -1021,6 +1028,7 @@ private fun SymbolGridContent(
         columns = GridCells.Fixed(SYMBOL_COLUMNS),
         state = gridState,
         modifier = contentModifier,
+        flingBehavior = NoFlingBehavior,
         contentPadding = PaddingValues(bottom = keyHeight + 6.dp),
         verticalArrangement = Arrangement.spacedBy(gap),
         horizontalArrangement = Arrangement.spacedBy(gap),

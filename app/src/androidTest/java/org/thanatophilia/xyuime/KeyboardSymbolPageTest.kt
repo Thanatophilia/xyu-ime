@@ -127,6 +127,32 @@ class KeyboardSymbolPageTest {
         rule.runOnIdle { assertTrue("Scrolling/swiping must not insert or delete", actions.isEmpty()) }
     }
 
+    @Test fun verticalGridStopsImmediatelyAfterReleaseWithoutInertia() {
+        setKeyboard(ascii = false, actions = mutableListOf())
+        val before = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
+            .fetchSemanticsNode().positionInRoot.y
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true).performTouchInput {
+                down(Offset(width * .5f, height * .82f))
+                moveTo(Offset(width * .5f, height * .48f), delayMillis = 120)
+                moveTo(Offset(width * .5f, height * .20f), delayMillis = 140)
+                up()
+            }
+            rule.mainClock.advanceTimeBy(120)
+            val afterRelease = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
+                .fetchSemanticsNode().positionInRoot.y
+            assertTrue("Vertical drag must move the content with the finger", afterRelease != before)
+            rule.mainClock.advanceTimeBy(500)
+            val settled = rule.onNodeWithTag("symbol_page:common", useUnmergedTree = true)
+                .fetchSemanticsNode().positionInRoot.y
+            assertEquals("Vertical content must not keep drifting after release", afterRelease, settled, 0.5f)
+        } finally {
+            rule.mainClock.autoAdvance = true
+            rule.mainClock.advanceTimeBy(500)
+        }
+    }
+
     @Test fun horizontalGridFollowsFingerAndSettlesWithoutMovingDelete() {
         val actions = mutableListOf<KeyboardAction>()
         setKeyboard(ascii = false, actions)
