@@ -8,6 +8,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
+import androidx.test.uiautomator.UiScrollable
+import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import java.io.File
 import org.junit.Assert.*
@@ -133,14 +135,13 @@ class ImePhase2Test {
     @Test fun sentenceCapsFollowPunctuationButNotOrdinarySpaces() = withIme {
         device.pressBack()
         node(By.text("更多测试类型").pkg(pkg)).click()
-        val first = node(By.text("邮箱").pkg(pkg)).visibleBounds
-        repeat(40) {
-            freshTree()
-            if (device.hasObject(By.text("句首大写").pkg(pkg))) return@repeat
-            device.swipe(device.displayWidth * 9 / 10, first.centerY(),
-                device.displayWidth / 10, first.centerY(), 20)
-            android.os.SystemClock.sleep(100)
-        }
+        // A full-width fling can skip a short label and then keep swiping at the end. Query
+        // this exact horizontal container instead of guessing the label's swipe distance.
+        val choices = UiScrollable(UiSelector().className("android.widget.HorizontalScrollView")
+            .packageName(pkg)).setAsHorizontalList()
+        choices.setMaxSearchSwipes(20)
+        assertTrue("Sentence capitalization test type must be reachable",
+            choices.scrollIntoView(UiSelector().text("句首大写").packageName(pkg)))
         node(By.text("句首大写").pkg(pkg)).click()
         editor().click()
         key("H"); key("i")
