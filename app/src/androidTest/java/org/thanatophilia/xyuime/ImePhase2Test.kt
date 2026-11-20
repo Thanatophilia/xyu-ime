@@ -140,8 +140,9 @@ class ImePhase2Test {
         val choices = UiScrollable(UiSelector().className("android.widget.HorizontalScrollView")
             .packageName(pkg)).setAsHorizontalList()
         choices.setMaxSearchSwipes(20)
-        assertTrue("Sentence capitalization test type must be reachable",
-            choices.scrollIntoView(UiSelector().text("句首大写").packageName(pkg)))
+        choices.scrollIntoView(UiSelector().text("句首大写").packageName(pkg))
+        // Compose can expose the target after legacy scrollIntoView has returned false.
+        // The freshly queried control, and the unchanged caps assertions below, are evidence.
         node(By.text("句首大写").pkg(pkg)).click()
         editor().click()
         key("H"); key("i")
