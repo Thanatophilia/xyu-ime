@@ -161,6 +161,59 @@ object RimeDeploymentTest {
             check(calls == 1)
             old(root)
         }
-        println("RimeDeploymentTest: 9 fault-injection scenarios passed")
+        fixture { root ->
+            var prepared = false
+            var started = false
+            fails {
+                RimeDeployment(root).initialize("../escape", {
+                    prepared = true
+                    File(root, "shared-invalid").apply { mkdirs() }
+                }, { _, _ -> started = true }, {})
+            }
+            check(!prepared && !started)
+            check(root.listFiles().orEmpty().isEmpty())
+        }
+        fixture { root ->
+            val deployment = RimeDeployment(root)
+            deployment.initialize("first-v1", {
+                File(root, "shared-first-v1").apply {
+                    mkdirs()
+                    File(this, "schema.yaml").writeText("schema-v1")
+                }
+            }, { shared, user ->
+                check(File(shared, "schema.yaml").readText() == "schema-v1")
+                check(user.isDirectory && user.listFiles().orEmpty().isEmpty())
+                put(root, "user/custom.yaml", "created-on-first-start")
+            }, {})
+            check(File(root, "version").readText() == "first-v1")
+            check(File(root, "user/custom.yaml").readText() == "created-on-first-start")
+            deployment.recover()
+            check(File(root, "user/custom.yaml").readText() == "created-on-first-start")
+        }
+        fixture { root ->
+            seed(root)
+            RimeDeployment(root).initialize("new-v2", {
+                File(root, "shared-new-v2").apply {
+                    mkdirs()
+                    File(this, "schema.yaml").writeText("schema-v2")
+                }
+            }, { shared, user ->
+                check(File(shared, "schema.yaml").readText() == "schema-v2")
+                check(File(user, "custom.yaml").readText() == "user settings")
+                check(File(user, "dict/000001.ldb").readText() == "learned\u0000bytes")
+                put(root, "user/dict/new-learned.ldb", "learned-v2")
+            }, {})
+            check(File(root, "version").readText() == "new-v2")
+            check(File(root, "shared-old/schema.yaml").readText() == "old schema")
+            check(File(root, "shared-new-v2/schema.yaml").readText() == "schema-v2")
+            check(File(root, "user/dict/000001.ldb").readText() == "learned\u0000bytes")
+            check(File(root, "user/dict/new-learned.ldb").readText() == "learned-v2")
+            repeat(2) {
+                RimeDeployment(root).recover()
+                check(File(root, "version").readText() == "new-v2")
+                check(File(root, "user/dict/new-learned.ldb").readText() == "learned-v2")
+            }
+        }
+        println("RimeDeploymentTest: 12 transaction, first-start and resource-upgrade scenarios passed")
     }
 }

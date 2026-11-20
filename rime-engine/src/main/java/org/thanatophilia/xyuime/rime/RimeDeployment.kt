@@ -104,7 +104,7 @@ internal class RimeDeployment(
      */
     fun initialize(target: String, prepare: () -> File,
                    start: (File, File) -> Unit, stop: () -> Unit) {
-        recover()
+        check(target.matches(Regex("[A-Za-z0-9._-]+")))
         val previous = version()
         fun attempt(v: String, shared: () -> File) {
             begin()
