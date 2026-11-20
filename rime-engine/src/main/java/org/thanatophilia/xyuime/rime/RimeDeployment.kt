@@ -18,7 +18,7 @@ internal class RimeDeployment(
     private val versionFile = File(root, "version")
 
     private fun version(): String? = if (versionFile.exists()) {
-        versionFile.readText().also { check(it.matches(Regex("[A-Za-z0-9._-]+"))) }
+        versionFile.readText().also(RimeDataVersion::validate)
     } else null
 
     private fun remove(file: File) { check(!file.exists() || file.deleteRecursively()) }
@@ -50,7 +50,7 @@ internal class RimeDeployment(
         if (pending.exists()) {
             if (File(pending, "state").readText() != "committed") {
                 val oldVersion = File(pending, "version").takeIf { it.exists() }?.readText()
-                if (oldVersion != null) check(oldVersion.matches(Regex("[A-Za-z0-9._-]+")))
+                if (oldVersion != null) RimeDataVersion.validate(oldVersion)
                 val user = File(root, "user")
                 remove(user)
                 File(pending, "user").takeIf { it.exists() }?.let { copy(it, user) }
@@ -93,6 +93,7 @@ internal class RimeDeployment(
     }
 
     fun commit(version: String) {
+        RimeDataVersion.validate(version)
         atomicText(versionFile, version)
         atomicText(File(pending, "state"), "committed")
         // Do not recursively delete the backup while native databases are open.
@@ -104,7 +105,8 @@ internal class RimeDeployment(
      */
     fun initialize(target: String, prepare: () -> File,
                    start: (File, File) -> Unit, stop: () -> Unit) {
-        check(target.matches(Regex("[A-Za-z0-9._-]+")))
+        RimeDataVersion.validate(target)
+        recover()
         val previous = version()
         fun attempt(v: String, shared: () -> File) {
             begin()

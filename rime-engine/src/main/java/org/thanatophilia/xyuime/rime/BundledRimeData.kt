@@ -2,6 +2,7 @@ package org.thanatophilia.xyuime.rime
 
 import android.content.res.AssetManager
 import java.io.File
+import java.io.InputStream
 import java.security.MessageDigest
 
 /** Versioned immutable shared files; user dictionaries are never copied or removed. */
@@ -30,7 +31,12 @@ internal object BundledRimeData {
         file.isFile && digest(file) == hash
     }
 
-    fun install(assets: AssetManager, root: File, version: String): File {
+    fun install(assets: AssetManager, root: File, version: String): File =
+        install(root, version) { name -> assets.open("rime/$name") }
+
+    /** Internal source seam for deterministic corrupt/missing/interrupted asset tests. */
+    internal fun install(root: File, version: String, openAsset: (String) -> InputStream): File {
+        RimeDataVersion.validate(version)
         check(root.isDirectory || root.mkdirs())
         val destination = File(root, "shared-$version")
         if (valid(destination)) return destination
@@ -39,7 +45,7 @@ internal object BundledRimeData {
         check(staging.mkdirs())
         try {
             checksums.keys.forEach { name ->
-                assets.open("rime/$name").use { input ->
+                openAsset(name).use { input ->
                     File(staging, name).outputStream().use { output ->
                         input.copyTo(output)
                         output.fd.sync()
