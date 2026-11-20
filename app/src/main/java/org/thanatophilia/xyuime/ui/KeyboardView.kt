@@ -268,6 +268,18 @@ fun XyuKeyboard(
     modifier: Modifier = Modifier,
     onKeyboardBounds: (android.graphics.Rect) -> Unit = {},
 ) {
+    NoKeyboardOverscroll {
+        KeyboardContent(state, onAction, modifier, onKeyboardBounds)
+    }
+}
+
+@Composable
+private fun KeyboardContent(
+    state: KeyboardUiState,
+    onAction: (KeyboardAction) -> Unit,
+    modifier: Modifier,
+    onKeyboardBounds: (android.graphics.Rect) -> Unit,
+) {
     val configuration = LocalConfiguration.current
     val compactLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     // Reserve the candidate strip in the fixed keyboard height. Showing a composition only
