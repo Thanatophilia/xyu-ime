@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.Velocity
@@ -41,7 +42,9 @@ class KeyboardOverscrollTest {
         override fun applyToScroll(delta: Offset, source: NestedScrollSource,
             performScroll: (Offset) -> Offset): Offset = performScroll(delta)
         override suspend fun applyToFling(velocity: Velocity,
-            performFling: suspend (Velocity) -> Velocity) = performFling(velocity)
+            performFling: suspend (Velocity) -> Velocity) {
+            performFling(velocity)
+        }
     }
 
     private data class CountingFactory(val creations: AtomicInteger = AtomicInteger()) : OverscrollFactory {
