@@ -153,3 +153,12 @@
 - 仅符号网格上下滚动恢复默认；手指拖动、顶部分类条手动横滑、分类点击不自动滚动、左右 HorizontalPager 跟手及吸附不变。
 - 代码 `d8d0c15`，Actions #141 app76 + Rime6 全部通过；APK SHA256 `7eead5ff0eee7dbd8f610ae9552bafe0d481493088fe6b09c818b5f34945d063`。
 - 0.3.141 尚待用户实机复测上下惯性感受；D6 仍暂停。
+
+
+## 十二、0.3.145 默认惯性 + 键盘范围禁回弹（2026-11-20，待实机）
+
+- 用户对纵向惯性的最终要求：使用原生默认惯性；同时询问 CyIME 的符号页回弹。源码核实 CyIME 在整个 IME Compose 外层 `NoKeyboardOverscroll`（`LocalOverscrollFactory provides null`），并未关闭默认 fling。
+- 絮雨在 `XyuKeyboard` 键盘范围统一包 `NoKeyboardOverscroll`，Settings/试打页面不受影响；`LazyVerticalGrid` 显式使用 `ScrollableDefaults.flingBehavior()`，不再缩速、定距或立即停止；移除 `overscrollEffect=null` 已非必要的旧尝试。左右 `PagerDefaults.flingBehavior` / snap 动画参数不变。
+- 新增4项 `KeyboardOverscrollTest`：普通列表保留平台回弹；键盘分类条、符号页和候选列表不继承回弹；拖过符号网格两端后仍能点击。原默认 fling 与横向跟手测试保留。
+- Actions #145 / run 44714462726：app 80 + Rime 6 全量测试通过；Lint 0 errors。APK 0.3.145，SHA256 `2810845541a0fbaf80ad9d3c0f7a9da1570695fdcdac95a60c88d8f8418c6804`。
+- 边界：CI 证据只覆盖云端 Android 36 模拟器；对不同 OEM 的触摸延迟解释不作保证。用户实机复测后才关闭 D5.2。D6 仍暂停。
