@@ -1,0 +1,97 @@
+name: D6 Release Artifact Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Upgrade scenario to validate (no APK installation)
+        required: true
+        type: choice
+        options:
+          - same-resource
+          - resource-bump
+      base_run_id:
+        description: Frozen 0.3.145 Android APK workflow run
+        required: true
+        default: '44714462726'
+        type: string
+      candidate_run_id:
+        description: Candidate Android APK workflow run
+        required: true
+        default: '44865969396'
+        type: string
+      candidate_artifact:
+        description: Candidate artifact name from its workflow run
+        required: true
+        default: xyu-ime-0.3.149
+        type: string
+      resource_version:
+        description: Required only for resource-bump; e.g. pinyin-simp-0c6861e-3-d6-ci-b
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  preflight:
+    name: Verify frozen release pair (metadata only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require trusted main branch
+        env:
+          REF: ${{ github.ref }}
+        run: test "$REF" = 'refs/heads/main'
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - name: Download frozen 0.3.145 release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: xyu-ime-0.3.145
+          path: d6-input/base
+          repository: Thanatophilia/xyu-ime
+          run-id: ${{ inputs.base_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download candidate release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.candidate_artifact }}
+          path: d6-input/candidate
+          repository: Thanatophilia/xyu-ime
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Locate and validate exact APK pair
+        env:
+          MODE: ${{ inputs.mode }}
+          RESOURCE_VERSION: ${{ inputs.resource_version }}
+        run: |
+          set -euo pipefail
+          mapfile -t base_apks < <(rg --files d6-input/base | rg '/xyu-ime-0\.3\.145\.apk$')
+          mapfile -t candidates < <(rg --files d6-input/candidate | rg '/xyu-ime-[^/]+\.apk$')
+          test "${#base_apks[@]}" -eq 1
+          test "${#candidates[@]}" -eq 1
+          args=(--baseline-json docs/d6-baseline.json --base-apk "${base_apks[0]}" --candidate-apk "${candidates[0]}" --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner")
+          if [[ "$MODE" == 'same-resource' ]]; then
+            args+=(--mode same)
+          else
+            test -n "$RESOURCE_VERSION"
+            args+=(--mode resource-bump --resource-version "$RESOURCE_VERSION")
+          fi
+          mkdir -p d6-report
+          python3 scripts/d6-release-preflight.py "${args[@]}" --output d6-report/preflight.json
+      - name: Upload metadata-only report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d6-release-preflight-${{ github.run_id }}
+          path: d6-report/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,47 @@
+name: D6 Disposable Emulator Safety Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-emulator:
+    name: Verify isolated emulator and root capability only
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      D6_DISPOSABLE_EMULATOR: YES
+      ANDROID_SERIAL: emulator-5554
+    steps:
+      - name: Require trusted main branch
+        env:
+          REF: ${{ github.ref }}
+        run: test "$REF" = 'refs/heads/main'
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+      - name: Start disposable Android 36 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            bash scripts/d6-emulator-preflight.sh | tee d6-emulator-capability.txt
+      - name: Record emulator capability only
+        if: always()
+        run: |
+          {
+            echo '## D6 disposable emulator capability'
+            echo 'This workflow did not install an APK, clear app data, force-stop an IME, or inspect a user database.'
+            echo 'A PASS establishes only that the selected CI emulator met the safety preflight.'
+          } >> "$GITHUB_STEP_SUMMARY"

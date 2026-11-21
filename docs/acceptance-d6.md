@@ -4,6 +4,19 @@
 
 **2026-11-21 用户确认 0.3.147“验证没问题，继续”**，据此记录首批普通实机回归通过。冻结的 D6 升级对照源仍为 **0.3.145**，不能将这次普通验证扩展为学习词跨进程、破坏性恢复或 release A/B 升级已通过。首批包没有改 UI、候选、符号、底栏、惯性或禁回弹。
 
+## D6 前置门禁（本地实现，待 GitHub CI 复核）
+
+针对 release A/B 前置风险，新增两类本地检查并接入工作流：
+
+- `scripts/d6-release-preflight.py`：从 APK 读取包名、versionCode/versionName、v2 证书摘要、debuggable/testOnly 标志、双 ABI、三项 Rime asset SHA-256、DATA_VERSION 和 debug 探针缺席；与 `d6-baseline.json` 中冻结的 0.3.145 APK 哈希比对，拒绝包名/证书改变、降级、资源字节变化或不符合预期的 DATA_VERSION。9 项测试覆盖 A/B 元数据规则与拒绝情况。
+- `scripts/d6-emulator-preflight.sh`：任何设备数据操作之前，要求手动 workflow、main 分支、显式 disposable 标记、单个 emulator serial、Android 36/x86_64/qemu 标志与 adb root；条件不符即退出。6 项假 adb 测试验证不安全条件会提前失败。
+- `.github/workflows/d6-release-preflight.yml` 只下载并检查原始基线/候选 APK，**不安装 APK、不处理用户目录**；`.github/workflows/d6-emulator-preflight.yml` 只探测 CI 临时模拟器是否满足门禁，尚不执行数据实验。主工作流运行这 15 项纯逻辑测试。
+- 直接对本地 0.3.145 与 0.3.149 APK 核对，三项 Rime assets 的 SHA-256 完全一致；两个 APK 自身 SHA256 分别与冻结清单中的 0.3.145 和验收记录中的 0.3.149 匹配。这只是文件身份/资源比较，不是 release 覆盖升级证据。
+
+本地验证：15 项 Python 测试通过、`actionlint` 检查三个工作流通过、Python 编译检查、Shell 语法检查与 `git diff --check` 通过。当前没有可用 Android SDK `aapt`/`apksigner` 或能启动的 Java 运行时，尚未针对真实 APK 执行预检器；也未验证 CI 模拟器实际开放 `adb root`。因此以上均标记为**前置实现，等待云端复核**，不提升 P0/P3 进度结论。本次没有安装/覆盖 APK、读取 release 用户目录、执行 force-stop/清数据、构建或发布新 APK，也没有运行真实 emulator A/B。
+
+---
+
 ## 第二批：真实原生学习记录、关闭重开与冷进程恢复（0.3.149）
 
 **实机反馈：2026-11-21，用户确认 0.3.149“还行，没问题”**，记录为第二批普通实机回归通过。这不是数据库打开时强杀、实际 IME 服务重建、release 覆盖升级 A/B 或整个 D6 的验收结论；下方云端取证范围与未完成门槛不变。冻结升级对照源仍为 0.3.145。

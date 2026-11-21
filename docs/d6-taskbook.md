@@ -6,7 +6,16 @@
 
 **D6 执行中，第二批 0.3.149（代码 `42a230e`）已于 2026-11-21 获用户确认“还行，没问题”，普通实机回归通过**。0.3.147 首批普通实机验证也已通过；此处均不代表 D6 整体验收。P0 静态基线、P1 部署/资源测试及 P2 受控 native 关闭/冷进程学习持久化部分完成；release 升级、数据库打开时强杀等仍未通过。详见[分批执行记录](acceptance-d6.md)、[冷进程证据](d6-native-evidence-149.json)和[基线清单](d6-baseline.json)。
 
-第二批仅在 debug 增加安全词条观测探针和四进程测试编排，release 强制检查不含探针；生产 native 关闭/持久化逻辑、输入行为、键盘 UI 不变。测试只操作 CI 专用包及私有人工数据，未在用户手机上强杀、清数据或降级安装。不得把本批云端通过写成 D6 完成。
+
+### 当前推进：覆盖升级前置门禁（未执行release安装）
+
+为降低后续 A/B 实验误装、降级或误读产物的风险，新增了 D6 release artifact 预检器和可丢弃 Android 模拟器安全门禁：
+
+- `scripts/d6-release-preflight.py` 只读 APK 包名/版本、v2签名证书、双 ABI、三项 Rime assets 哈希、DATA_VERSION 及测试探针缺席；核对 frozen 0.3.145 SHA，并要求候选包同包名/同证书、更高 versionCode。支持同资源版本 A 路径和仅版本标识变化的 B 路径，且 B 必须保持 assets 字节哈希不变。
+- `scripts/d6-emulator-preflight.sh` 在任何设备数据动作前要求显式 disposable opt-in、GitHub 手动 workflow、main 分支、单个 `emulator-*` serial、API 36 / x86_64、`ro.kernel.qemu=1` 和 `adb root`；任一条件不符即拒绝继续。
+- 两个 Python 测试文件覆盖 APK身份/资源版本错误，以及设备序列号、API/ABI、root 不满足时的拒绝路径；当前本地共15项通过。现有主工作流只加入这些无设备副作用的单测。
+
+本次没有安装/覆盖 APK、读取 release 用户目录、执行 force-stop/清数据、构建或发布新 APK，也没有运行真实 emulator A/B。Android SDK aapt/apksigner 和可运行 Java/Gradle 不在当前沙箱可用，因此 APK 真实元数据解析尚待 GitHub Actions 验证；本地通过只证明脚本逻辑和 fail-closed 分支，不能记作 P0/P3 升级证据。下一步在独立手动 workflow 中拿到并核验原始 0.3.145 构建 artifact，再实现独立 UI fixture 与已 root 的 disposable emulator A 路径；若镜像不允许安全 root，则停止数据层实验，不降低门禁。
 
 ---
 
