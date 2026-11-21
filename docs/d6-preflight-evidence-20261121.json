@@ -1,0 +1,159 @@
+{
+  "recorded_at": "2026-11-21",
+  "gate_code_commit": "57dec5e84e6e2a6340569c0c63fed9ec02040382",
+  "purpose": "D6 release-upgrade prerequisites only; no release APK installed and no release user DB accessed",
+  "release_pair_preflight": {
+    "run_id": 44898462928,
+    "url": "https://github.com/Thanatophilia/xyu-ime/actions/runs/44898462928",
+    "artifact_id": 14705300227,
+    "artifact_name": "d6-release-preflight-44898462928",
+    "report_sha256": "fa8c637c2722b932d61738b667a58016ddf2c37bf05772ab572f183da5b89a13",
+    "rules_test_count": 15,
+    "tooling": "Android build-tools 36.0.0 real aapt and apksigner on Ubuntu CI",
+    "source_base_run_id": 44714462726,
+    "source_candidate_run_id": 44865969396,
+    "report": {
+      "result": "PASS",
+      "mode": "same",
+      "base": {
+        "path": "xyu-ime-0.3.145.apk",
+        "sha256": "2810845541a0fbaf80ad9d3c0f7a9da1570695fdcdac95a60c88d8f8418c6804",
+        "package_name": "org.thanatophilia.xyuime",
+        "version_code": 145,
+        "version_name": "0.3.145",
+        "certificate_sha256": "fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0",
+        "abis": [
+          "arm64-v8a",
+          "x86_64"
+        ],
+        "rime_asset_sha256": {
+          "assets/rime/default.yaml": "aabd181c47275af3114aca55e4fcd94fe60ef4cb3554eee1e160a3ecc13f6166",
+          "assets/rime/xyu_pinyin.schema.yaml": "87d0e3f3164dbc182b5d5908bb914cc007db884d013f66846b20588727a9433a",
+          "assets/rime/pinyin_simp.dict.yaml": "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b"
+        },
+        "data_versions": [
+          "pinyin-simp-0c6861e-3"
+        ]
+      },
+      "candidate": {
+        "path": "xyu-ime-0.3.149.apk",
+        "sha256": "7ef1f6d27298cd3d7951bf52672cb11780579e8489d740bfce308a8bd671f2d6",
+        "package_name": "org.thanatophilia.xyuime",
+        "version_code": 149,
+        "version_name": "0.3.149",
+        "certificate_sha256": "fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0",
+        "abis": [
+          "arm64-v8a",
+          "x86_64"
+        ],
+        "rime_asset_sha256": {
+          "assets/rime/default.yaml": "aabd181c47275af3114aca55e4fcd94fe60ef4cb3554eee1e160a3ecc13f6166",
+          "assets/rime/xyu_pinyin.schema.yaml": "87d0e3f3164dbc182b5d5908bb914cc007db884d013f66846b20588727a9433a",
+          "assets/rime/pinyin_simp.dict.yaml": "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b"
+        },
+        "data_versions": [
+          "pinyin-simp-0c6861e-3"
+        ]
+      },
+      "comparison": {
+        "same_package_and_signer": true,
+        "version_code_increased": true,
+        "rime_assets_unchanged": true,
+        "expected_candidate_data_version": "pinyin-simp-0c6861e-3",
+        "debug_probe_absent": true
+      },
+      "scope": "Artifact preflight only; no installation or user-data preservation claim."
+    }
+  },
+  "disposable_emulator_capability": {
+    "run_id": 44898466310,
+    "url": "https://github.com/Thanatophilia/xyu-ime/actions/runs/44898466310",
+    "artifact_id": 14705370343,
+    "artifact_name": "d6-emulator-capability-44898466310",
+    "report_sha256": "5dfc966930791a51b0b3264cdad7be423ba4676c5e0f2a2891c92b250ecb1e2a",
+    "rules_test_count": 7,
+    "report": "D6 disposable emulator preflight PASS: serial=emulator-5554 api=36 abi=x86_64 root=yes",
+    "device_api": 36,
+    "device_abi": "x86_64",
+    "qemu_flag_checked": true,
+    "adb_root_uid": 0,
+    "pipeline_failure_propagation_tested": true
+  },
+  "ordinary_regression": {
+    "run_id": 44896938826,
+    "run_number": 151,
+    "url": "https://github.com/Thanatophilia/xyu-ime/actions/runs/44896938826",
+    "code_commit": "a11fa9fe4c6dd135de759cec994a0cfda0d6d59b",
+    "result": "success",
+    "app_android": {
+      "tests": 80,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "rime_android": {
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "app_jvm": {
+      "tests": 46,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "rime_jvm": {
+      "junit_tests": 6,
+      "deployment_wrapper_internal_scenarios": 12,
+      "startup_recovery_tests": 5,
+      "failures": 0,
+      "ignored": 0,
+      "source": "Gradle HTML report, not uploaded as raw JUnit XML"
+    },
+    "controlled_native_phases": 4,
+    "controlled_native_counts": {
+      "negative_control": 0,
+      "seed": 3,
+      "verify": 3,
+      "modified": 5,
+      "restored": 3
+    },
+    "lint": {
+      "errors": 0,
+      "warnings": 22,
+      "hints": 9
+    },
+    "release_signing_v2_and_native_static_checks": "PASS",
+    "delivery_scope": "CI regression artifact only; not a new user-delivered or device-accepted version"
+  },
+  "failed_or_cancelled_attempts": [
+    {
+      "run_id": 44894986725,
+      "kind": "main #150",
+      "result": "failure",
+      "reason": "Ubuntu runner lacked rg; safety-gate mock tests failed before Gradle"
+    },
+    {
+      "run_id": 44897423235,
+      "kind": "first release preflight",
+      "result": "failure",
+      "reason": "Artifact downloads succeeded; APK filename scan lacked rg"
+    },
+    {
+      "run_id": 44897427635,
+      "kind": "first emulator capability",
+      "result": "cancelled",
+      "reason": "Stopped old workflow before accepting evidence; added KVM setup and pipeline fail-closed propagation"
+    }
+  ],
+  "not_proven": [
+    "release installation baseline on disposable emulator",
+    "in-place release upgrade A or B and user-data preservation",
+    "new shared DATA_VERSION installation path",
+    "unfinalized open-DB process kill and actual IME service reconstruction",
+    "full R01-R12 fault matrix",
+    "16 KB kernel runtime and OEM/arm64 runtime",
+    "full D6 or final user acceptance"
+  ]
+}

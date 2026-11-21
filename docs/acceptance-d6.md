@@ -4,7 +4,7 @@
 
 **2026-11-21 用户确认 0.3.147“验证没问题，继续”**，据此记录首批普通实机回归通过。冻结的 D6 升级对照源仍为 **0.3.145**，不能将这次普通验证扩展为学习词跨进程、破坏性恢复或 release A/B 升级已通过。首批包没有改 UI、候选、符号、底栏、惯性或禁回弹。
 
-## D6 前置门禁（本地实现，待 GitHub CI 复核）
+## D6 前置门禁（云端验证通过，不是覆盖升级验收）
 
 针对 release A/B 前置风险，新增两类本地检查并接入工作流：
 
@@ -13,9 +13,15 @@
 - `.github/workflows/d6-release-preflight.yml` 只下载并检查原始基线/候选 APK，**不安装 APK、不处理用户目录**；`.github/workflows/d6-emulator-preflight.yml` 只探测 CI 临时模拟器是否满足门禁，尚不执行数据实验。主工作流运行这 22 项纯逻辑测试；手动工作流也分别运行自身的测试，checkout 锁定触发提交。
 - 直接对本地 0.3.145 与 0.3.149 APK 核对，三项 Rime assets 的 SHA-256 完全一致；两个 APK 自身 SHA256 分别与冻结清单中的 0.3.145 和验收记录中的 0.3.149 匹配。这只是文件身份/资源比较，不是 release 覆盖升级证据。
 
-本地验证：22 项 Python 测试通过、`actionlint` 检查三个工作流通过、Python 编译检查、Shell 语法检查与 `git diff --check` 通过。第一次推送的主工作流 [#150](https://github.com/Thanatophilia/xyu-ime/actions/runs/44894986725) 在启动后 1 分 19 秒失败；已下载原始日志，确认 Ubuntu runner 未预装 `rg`，导致假 adb 门禁测试提前失败。移除脚本的 `rg` 依赖后，#151 的两项脚本测试、编译、JVM 与 Lint 已通过，Android 全量仍在复核。第一次手动产物预检也因 APK 定位命令依赖缺失的 `rg` 失败，旧/新 artifact 下载本身成功；现明确安装 ripgrep，未以失败重跑覆盖首次失败记录。旧模拟器能力探测因缺少 KVM 准备而尚未给出结果，已取消并补齐 KVM 权限及管道失败传播；即使旧工作流最终显示绿色也不作为门禁通过证据。
+本地验证：22 项 Python 测试、`actionlint` 三个工作流、Python 编译检查、Shell 语法与 `git diff --check` 均通过。云端已取得以下直接证据（门禁提交 `57dec5e`，完整摘要见 [前置证据](d6-preflight-evidence-20261121.json)）：
 
-当前没有本地可用 Android SDK `aapt`/`apksigner` 或能启动的 Java 运行时；真实 APK 元数据解析及 CI 模拟器 `adb root` 仍需修正后的手动工作流验证。以上均为**前置实现，等待云端复核**，不提升 P0/P3 进度结论。未在手机上安装/覆盖、强杀或清数据，未读取 release 用户目录；未执行真实 emulator A/B。CI 主工作流可能产生常规 release artifact，但本轮不将其作为新的用户交付版本。
+1. [真实 release 产物预检](https://github.com/Thanatophilia/xyu-ime/actions/runs/44898462928) **success**：真实 Android build-tools 36 的 `aapt`/`apksigner` 检查原始 0.3.145 与 0.3.149。同包名、唯一相同证书、v2、versionCode 145→149、双 ABI、三项 assets 哈希相同、DATA_VERSION 不变、无 debug probe；15 项规则测试也通过。报告明确仅为 metadata preflight，没有安装 APK。
+2. [临时模拟器安全门禁](https://github.com/Thanatophilia/xyu-ime/actions/runs/44898466310) **success**：7 项拒绝/管道测试通过，实际输出 `serial=emulator-5554 api=36 abi=x86_64 root=yes`，确认 qemu 标志及 root UID=0。只证明本次 CI 临时模拟器可供后续隔离实验，不证明已安装或升级 release 包。
+3. [主回归 #151](https://github.com/Thanatophilia/xyu-ime/actions/runs/44896938826) **success**（提交 `a11fa9f`）：app Android 80 + Rime Android 11，零失败/错误/跳过；app JVM 46，Rime 部署套件及启动恢复继续通过；四进程受控 native 证据仍为 0→3、冷进程3、修改5、恢复3。Lint 0 errors / 22 warnings / 9 hints；v2、双 ABI、16KB 静态及探针缺席检查通过。该 run 产生 `0.3.151` 常规 CI artifact，**不作为新的用户交付版或实机验收版**；用户当前已接受候选仍为0.3.149。
+
+首次失败保留：[主工作流 #150](https://github.com/Thanatophilia/xyu-ime/actions/runs/44894986725) 与 [第一次手动产物预检](https://github.com/Thanatophilia/xyu-ime/actions/runs/44897423235) 均因 Ubuntu 缺少 `rg` 失败；后者 artifact 下载已成功，但未运行到真实 APK 预检。安全脚本去除该依赖、产物工作流明确安装 ripgrep 后重跑。旧模拟器 run `44897427635` 在接受任何能力结论前取消；新版本补齐 KVM 权限、固定源码提交及 pipefail 后再验证。不能用后续成功覆盖首次失败记录。
+
+这批仅完成 release 覆盖升级的前置工具与环境证据。**仍未安装原始 release 145、未执行 A/B 覆盖安装、未读取 release 用户目录、未做打开数据库时未受控强杀或实际服务重建**。没有操作用户手机；P0/P3 不据此标完整通过，D6 仍执行中。
 
 ---
 

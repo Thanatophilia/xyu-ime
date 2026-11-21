@@ -15,7 +15,7 @@
 - `scripts/d6-emulator-preflight.sh` 在任何设备数据动作前要求显式 disposable opt-in、GitHub 手动 workflow、main 分支、单个 `emulator-*` serial、API 36 / x86_64、`ro.kernel.qemu=1` 和 `adb root`；任一条件不符即拒绝继续。
 - 两个 Python 测试文件覆盖 APK 身份/资源版本错误、多签名者、无效证书摘要，以及设备序列号、API/ABI、root 不满足时的拒绝路径；当前本地共 22 项通过。已明确安装云端产物扫描所需 ripgrep，安全门禁不再依赖 rg；工作流 `tee` 管道启用 pipefail 并有失败传播回归测试。
 
-尚未执行 release 覆盖安装或读取 release 用户目录，也未操作用户手机。已推送前置实现并启动 CI：首次 #150 因 Ubuntu runner 缺少 rg 失败；第二次 #151 的原15项脚本测试、编译、JVM 与 Lint 已通过，Android 回归仍在核对。独立产物预检首次下载了原始145/149 artifact，但定位APK时因同一依赖问题失败，已修正。独立 emulator 能力探测补齐 KVM 与退出码传播后重跑；两者都不执行 A/B 安装或用户数据实验。当前沙箱 Java 因 PaX 无法启动，真实 APK 元数据及 root 能力以云端工作流证据为准，不能用本地 mock 单测替代。下一步待这些前置检查通过，再实现独立 UI fixture 与 disposable emulator A 路径；若镜像不允许安全 root，则停止数据层实验，不降低门禁。
+尚未执行 release 覆盖安装或读取 release 用户目录，也未操作用户手机。前置工具与环境已取得云端证据：`57dec5e` 的 [真实APK元数据预检](https://github.com/Thanatophilia/xyu-ime/actions/runs/44898462928) 通过（原始145→149，同签名/双ABI/同assets/DATA_VERSION）；[临时模拟器安全门禁](https://github.com/Thanatophilia/xyu-ime/actions/runs/44898466310) 通过（API36/x86_64/qemu/root UID0）；22项规则测试分别在两个手动工作流通过。[主回归#151](https://github.com/Thanatophilia/xyu-ime/actions/runs/44896938826) 也已整体通过，未交付其常规CI产物为新用户版本。首次#150与手动产物预检因Ubuntu缺rg失败，修正后通过；旧模拟器能力run取消，新版本补齐KVM/pipefail再验证，失败历史保留。详细见[前置证据](d6-preflight-evidence-20261121.json)。这些不是release安装/升级证据，P0/P3仍未完整通过。下一步实现独立UI fixture、原始145可重复安装输入及真实A/B升级；后续每次设备动作仍必须重新通过安全门禁，不能将本次root结果永久复用。
 
 ---
 

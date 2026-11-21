@@ -4,6 +4,8 @@
 
 后续执行细节见[完整实施方案](docs/implementation-plan.md)、[测试与验收矩阵](docs/verification-plan.md)和当前 [D6 升级恢复任务书](docs/d6-taskbook.md)，包含工作包、实施顺序、交付标准及测试环境。
 
+**D6 前置基础设施已通过云端验证（2026-11-21）**：真实0.3.145→0.3.149 release产物身份/资源预检通过，临时Android36/x86_64模拟器确认qemu与root UID0；22项安全/签名/失败传播规则测试分别在手动工作流通过。主回归#151 app80+Rime11、四次受控native隔离流程、签名/静态检查全部通过。**尚未安装release基线或执行A/B覆盖升级**；0.3.151仅为CI回归产物，本轮不作为新的用户交付版，当前实机候选仍0.3.149。见[前置证据](docs/d6-preflight-evidence-20261121.json)与[执行边界](docs/acceptance-d6.md)。
+
 ## 第一阶段 · 已完成
 
 - 验收基线：**0.1.22**，代码提交 [`590c53c`](https://github.com/Thanatophilia/xyu-ime/commit/590c53c39388b83e78d1bfaa0c0202ffec5ae660)。

@@ -39,6 +39,20 @@
     "usage": "disposable CI emulator",
     "resource_tests": "unique cache-directory fixtures, not open user databases"
   },
+  "preflight_prerequisites": {
+    "code_commit": "57dec5e84e6e2a6340569c0c63fed9ec02040382",
+    "release_pair_run_id": 44898462928,
+    "disposable_emulator_run_id": 44898466310,
+    "same_resource_release_pair": "0.3.145 -> 0.3.149 metadata-only PASS",
+    "disposable_emulator_capability": "Android 36 / x86_64 / qemu / root uid0 PASS",
+    "rule_tests": 22,
+    "ordinary_regression_run_id": 44896938826,
+    "ordinary_regression_run_number": 151,
+    "evidence": "d6-preflight-evidence-20261121.json",
+    "release_installation_performed": false,
+    "real_upgrade_A_or_B_performed": false,
+    "new_user_delivery": false
+  },
   "not_yet_verified": [
     "source release APK installation baseline on a designated disposable device",
     "real release-to-release in-place upgrade and user-data preservation",
