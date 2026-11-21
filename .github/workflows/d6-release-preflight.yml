@@ -47,7 +47,11 @@ jobs:
         run: test "$REF" = 'refs/heads/main'
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
+      - name: Test APK identity and signer rejection rules
+        run: python3 scripts/test-d6-release-preflight.py
+      - name: Install artifact scanning dependency
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ripgrep
       - uses: android-actions/setup-android@v3
         with:
           packages: 'build-tools;36.0.0'

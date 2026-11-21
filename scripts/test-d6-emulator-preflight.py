@@ -51,6 +51,18 @@ esac
             result.adb_log = log.read_text(encoding="utf-8") if log.exists() else ""
             return result
 
+    def test_workflow_pipeline_keeps_safety_gate_failure(self) -> None:
+        workflow = (SCRIPT.parent.parent / ".github/workflows/d6-emulator-preflight.yml").read_text()
+        command = next(line.strip().split("script: ", 1)[1] for line in workflow.splitlines()
+                       if line.strip().startswith("script: "))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            (root / "scripts/d6-emulator-preflight.sh").write_text("exit 2\n")
+            result = subprocess.run(["sh", "-c", command], cwd=root, capture_output=True,
+                                    text=True, timeout=10, check=False)
+            self.assertEqual(2, result.returncode)
+
     def test_requires_explicit_disposable_emulator_opt_in_before_adb(self) -> None:
         result = self.run_gate(opted_in=False)
         self.assertEqual(2, result.returncode)

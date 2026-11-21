@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      D6_DISPOSABLE_EMULATOR: YES
+      D6_DISPOSABLE_EMULATOR: 'YES'
       ANDROID_SERIAL: emulator-5554
     steps:
       - name: Require trusted main branch
@@ -21,11 +21,18 @@ jobs:
         run: test "$REF" = 'refs/heads/main'
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
+      - name: Test safety gate rejection and pipeline exit codes
+        run: python3 scripts/test-d6-emulator-preflight.py
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools'
           log-accepted-android-sdk-licenses: false
+      - name: Enable KVM for disposable emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Start disposable Android 36 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -35,8 +42,15 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            bash scripts/d6-emulator-preflight.sh | tee d6-emulator-capability.txt
+          script: bash -o pipefail -c 'bash scripts/d6-emulator-preflight.sh 2>&1 | tee d6-emulator-capability.txt'
+      - name: Upload emulator capability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d6-emulator-capability-${{ github.run_id }}
+          path: d6-emulator-capability.txt
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Record emulator capability only
         if: always()
         run: |

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import importlib.util
-import os
+import subprocess
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).with_name("d6-release-preflight.py")
 spec = importlib.util.spec_from_file_location("d6_release_preflight", SCRIPT)
@@ -34,6 +36,42 @@ def apk(name: str, code: int, data_version: str, digest: str) -> dict:
     }
 
 
+def signature_output(count: int = 1, *, v2: bool = True) -> str:
+    lines = ["Verifies", f"Verified using v2 scheme (APK Signature Scheme v2): {str(v2).lower()}",
+             f"Number of signers: {count}"]
+    for index in range(1, count + 1):
+        lines.append(f"Signer #{index} certificate SHA-256 digest: {IDENTITY['certificate_sha256']}")
+    return "\n".join(lines) + "\n"
+
+
+class SignerValidationTest(unittest.TestCase):
+    def test_accepts_exact_single_signer(self) -> None:
+        self.assertEqual(IDENTITY["certificate_sha256"], preflight.parse_signer(signature_output()))
+
+    def test_rejects_second_signer_even_with_matching_first(self) -> None:
+        with self.assertRaises(preflight.PreflightError):
+            preflight.parse_signer(signature_output(2))
+
+    def test_rejects_missing_signer_count(self) -> None:
+        with self.assertRaises(preflight.PreflightError):
+            preflight.parse_signer(signature_output().replace("Number of signers: 1\n", ""))
+
+    def test_rejects_wrong_sha256_length(self) -> None:
+        with self.assertRaises(preflight.PreflightError):
+            preflight.parse_signer(signature_output().replace(IDENTITY["certificate_sha256"], "abcdef"))
+
+    def test_rejects_unverified_v2(self) -> None:
+        with self.assertRaises(preflight.PreflightError):
+            preflight.parse_signer(signature_output(v2=False))
+
+    def test_tool_failure_is_not_accepted(self) -> None:
+        with patch.object(preflight.subprocess, "run", return_value=SimpleNamespace(
+            returncode=1, stdout="", stderr="synthetic tool error"
+        )):
+            with self.assertRaises(preflight.PreflightError):
+                preflight.run_tool(["apksigner", "verify"])
+
+
 class ApkInspectionTest(unittest.TestCase):
     def test_extracts_release_identity_assets_and_data_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -44,29 +82,27 @@ class ApkInspectionTest(unittest.TestCase):
                 apk_file.writestr("classes.dex", b"pinyin-simp-0c6861e-3")
                 apk_file.writestr("lib/arm64-v8a/libxyu_rime.so", b"native-arm")
                 apk_file.writestr("lib/x86_64/libxyu_rime.so", b"native-x86")
-            class Result:
-                returncode = 0
-                stderr = ""
-                def __init__(self, stdout: str) -> None:
-                    self.stdout = stdout
-            manifest = {"value": "N: android=http://schemas.android.com/apk/res/android\\n"}
-            def run(command: list[str], **_: object) -> Result:
+            manifest = {"value": "N: android=http://schemas.android.com/apk/res/android\n"}
+            def run(command: list[str], **_: object) -> SimpleNamespace:
                 if command[1:3] == ["dump", "badging"]:
-                    return Result("package: name='org.thanatophilia.xyuime' versionCode='145' versionName='0.3.145'\\n")
-                if command[1:3] == ["dump", "xmltree"]:
-                    return Result(manifest["value"])
-                return Result("Verifies\\nVerified using v2 scheme (APK Signature Scheme v2): true\\nSigner #1 certificate SHA-256 digest: FA:62:89:5F:A2:56:FB:28:6A:CB:65:46:A1:66:33:13:1A:F7:42:FA:08:AB:AC:4C:1C:3F:A1:64:5E:E9:0D:7D:0\\n")
-            from unittest.mock import patch
+                    output = "package: name='org.thanatophilia.xyuime' versionCode='145' versionName='0.3.145'\n"
+                elif command[1:3] == ["dump", "xmltree"]:
+                    output = manifest["value"]
+                else:
+                    output = signature_output()
+                return SimpleNamespace(returncode=0, stdout=output, stderr="")
             with patch.object(preflight.subprocess, "run", side_effect=run):
                 result = preflight.inspect_apk(path, "aapt", "apksigner")
             self.assertEqual(145, result["version_code"])
             self.assertEqual(DATA_VERSION, result["data_versions"][0])
+            self.assertEqual(IDENTITY["certificate_sha256"], result["certificate_sha256"])
             self.assertEqual(["arm64-v8a", "x86_64"], result["abis"])
             self.assertEqual(3, len(result["rime_asset_sha256"]))
-            manifest["value"] = " A: android:debuggable(0x0101000f)=(type 0x12)0xffffffff\\n"
-            with patch.object(preflight.subprocess, "run", side_effect=run):
-                with self.assertRaises(preflight.PreflightError):
-                    preflight.inspect_apk(path, "aapt", "apksigner")
+            for flag in ("debuggable", "testOnly"):
+                manifest["value"] = f" A: android:{flag}(0x0101000f)=(type 0x12)0xffffffff\n"
+                with patch.object(preflight.subprocess, "run", side_effect=run):
+                    with self.assertRaises(preflight.PreflightError):
+                        preflight.inspect_apk(path, "aapt", "apksigner")
 
 
 class ReleasePairValidationTest(unittest.TestCase):

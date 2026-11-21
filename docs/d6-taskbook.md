@@ -13,9 +13,9 @@
 
 - `scripts/d6-release-preflight.py` 只读 APK 包名/版本、v2签名证书、双 ABI、三项 Rime assets 哈希、DATA_VERSION 及测试探针缺席；核对 frozen 0.3.145 SHA，并要求候选包同包名/同证书、更高 versionCode。支持同资源版本 A 路径和仅版本标识变化的 B 路径，且 B 必须保持 assets 字节哈希不变。
 - `scripts/d6-emulator-preflight.sh` 在任何设备数据动作前要求显式 disposable opt-in、GitHub 手动 workflow、main 分支、单个 `emulator-*` serial、API 36 / x86_64、`ro.kernel.qemu=1` 和 `adb root`；任一条件不符即拒绝继续。
-- 两个 Python 测试文件覆盖 APK身份/资源版本错误，以及设备序列号、API/ABI、root 不满足时的拒绝路径；当前本地共15项通过。现有主工作流只加入这些无设备副作用的单测。
+- 两个 Python 测试文件覆盖 APK 身份/资源版本错误、多签名者、无效证书摘要，以及设备序列号、API/ABI、root 不满足时的拒绝路径；当前本地共 22 项通过。已明确安装云端产物扫描所需 ripgrep，安全门禁不再依赖 rg；工作流 `tee` 管道启用 pipefail 并有失败传播回归测试。
 
-本次没有安装/覆盖 APK、读取 release 用户目录、执行 force-stop/清数据、构建或发布新 APK，也没有运行真实 emulator A/B。Android SDK aapt/apksigner 和可运行 Java/Gradle 不在当前沙箱可用，因此 APK 真实元数据解析尚待 GitHub Actions 验证；本地通过只证明脚本逻辑和 fail-closed 分支，不能记作 P0/P3 升级证据。下一步在独立手动 workflow 中拿到并核验原始 0.3.145 构建 artifact，再实现独立 UI fixture 与已 root 的 disposable emulator A 路径；若镜像不允许安全 root，则停止数据层实验，不降低门禁。
+尚未执行 release 覆盖安装或读取 release 用户目录，也未操作用户手机。已推送前置实现并启动 CI：首次 #150 因 Ubuntu runner 缺少 rg 失败；第二次 #151 的原15项脚本测试、编译、JVM 与 Lint 已通过，Android 回归仍在核对。独立产物预检首次下载了原始145/149 artifact，但定位APK时因同一依赖问题失败，已修正。独立 emulator 能力探测补齐 KVM 与退出码传播后重跑；两者都不执行 A/B 安装或用户数据实验。当前沙箱 Java 因 PaX 无法启动，真实 APK 元数据及 root 能力以云端工作流证据为准，不能用本地 mock 单测替代。下一步待这些前置检查通过，再实现独立 UI fixture 与 disposable emulator A 路径；若镜像不允许安全 root，则停止数据层实验，不降低门禁。
 
 ---
 

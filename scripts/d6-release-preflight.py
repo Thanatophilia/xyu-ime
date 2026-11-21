@@ -43,6 +43,20 @@ def run_tool(command: list[str]) -> str:
     return result.stdout
 
 
+def parse_signer(certificate: str) -> str:
+    if not re.search(r"^Verified using v2 scheme .*: true$", certificate, re.MULTILINE):
+        raise PreflightError("APK Signature Scheme v2 is not verified")
+    counts = re.findall(r"^Number of signers: (\d+)$", certificate, re.MULTILINE)
+    signers = re.findall(r"^Signer #(\d+) certificate SHA-256 digest: ([0-9a-fA-F:]+)$",
+                         certificate, re.MULTILINE)
+    if counts != ["1"] or len(signers) != 1 or signers[0][0] != "1":
+        raise PreflightError("Release APK must have exactly one signer certificate")
+    digest = signers[0][1].replace(":", "").lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise PreflightError("Signer certificate SHA-256 must be exactly 64 hex digits")
+    return digest
+
+
 def inspect_apk(path: Path, aapt: str, apksigner: str) -> dict:
     if not path.is_file():
         raise PreflightError(f"APK does not exist: {path}")
@@ -64,11 +78,7 @@ def inspect_apk(path: Path, aapt: str, apksigner: str) -> dict:
     if manifest_flags:
         raise PreflightError(f"Release manifest enables {', '.join(sorted(set(manifest_flags)))} in {path.name}")
     certificate = run_tool([apksigner, "verify", "--verbose", "--print-certs", str(path)])
-    if not re.search(r"Verified using v2 scheme .*: true", certificate):
-        raise PreflightError(f"APK Signature Scheme v2 is not verified for {path.name}")
-    cert_match = re.search(r"Signer #1 certificate SHA-256 digest: ([0-9a-fA-F:]+)", certificate)
-    if not cert_match:
-        raise PreflightError(f"Cannot read signer certificate digest from {path.name}")
+    signer_digest = parse_signer(certificate)
 
     try:
         with zipfile.ZipFile(path) as apk:
@@ -77,6 +87,9 @@ def inspect_apk(path: Path, aapt: str, apksigner: str) -> dict:
                     if name.startswith("lib/") and name.endswith(".so") and len(name.split("/")) >= 3}
             if abis != EXPECTED_ABIS:
                 raise PreflightError(f"Unexpected native ABI set in {path.name}: {sorted(abis)}")
+            for abi in EXPECTED_ABIS:
+                if f"lib/{abi}/libxyu_rime.so" not in names:
+                    raise PreflightError(f"Missing Rime JNI library for {abi} in {path.name}")
             asset_hashes = {}
             for name in ASSETS:
                 if name not in names:
@@ -102,7 +115,7 @@ def inspect_apk(path: Path, aapt: str, apksigner: str) -> dict:
         "package_name": match.group(1),
         "version_code": int(match.group(2)),
         "version_name": match.group(3),
-        "certificate_sha256": cert_match.group(1).replace(":", "").lower(),
+        "certificate_sha256": signer_digest,
         "abis": sorted(abis),
         "rime_asset_sha256": asset_hashes,
         "data_versions": versions,

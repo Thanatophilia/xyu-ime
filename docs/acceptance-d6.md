@@ -8,12 +8,14 @@
 
 针对 release A/B 前置风险，新增两类本地检查并接入工作流：
 
-- `scripts/d6-release-preflight.py`：从 APK 读取包名、versionCode/versionName、v2 证书摘要、debuggable/testOnly 标志、双 ABI、三项 Rime asset SHA-256、DATA_VERSION 和 debug 探针缺席；与 `d6-baseline.json` 中冻结的 0.3.145 APK 哈希比对，拒绝包名/证书改变、降级、资源字节变化或不符合预期的 DATA_VERSION。9 项测试覆盖 A/B 元数据规则与拒绝情况。
-- `scripts/d6-emulator-preflight.sh`：任何设备数据操作之前，要求手动 workflow、main 分支、显式 disposable 标记、单个 emulator serial、Android 36/x86_64/qemu 标志与 adb root；条件不符即退出。6 项假 adb 测试验证不安全条件会提前失败。
-- `.github/workflows/d6-release-preflight.yml` 只下载并检查原始基线/候选 APK，**不安装 APK、不处理用户目录**；`.github/workflows/d6-emulator-preflight.yml` 只探测 CI 临时模拟器是否满足门禁，尚不执行数据实验。主工作流运行这 15 项纯逻辑测试。
+- `scripts/d6-release-preflight.py`：从 APK 读取包名、versionCode/versionName、唯一 v2 签名者证书摘要、debuggable/testOnly 标志、双 ABI、三项 Rime asset SHA-256、DATA_VERSION 和 debug 探针缺席；与 `d6-baseline.json` 中冻结的 0.3.145 APK 哈希比对，拒绝包名/证书改变、多签名者、无效证书摘要、降级、资源字节变化或不符合预期的 DATA_VERSION。15 项测试覆盖 A/B 元数据规则与拒绝情况。
+- `scripts/d6-emulator-preflight.sh`：任何设备数据操作之前，要求手动 workflow、main 分支、显式 disposable 标记、单个 emulator serial、Android 36/x86_64/qemu 标志与 adb root；条件不符即退出。7 项假 adb/工作流调用测试验证不安全条件提前失败，且 `tee` 报告管道不得吞掉门禁退出码。
+- `.github/workflows/d6-release-preflight.yml` 只下载并检查原始基线/候选 APK，**不安装 APK、不处理用户目录**；`.github/workflows/d6-emulator-preflight.yml` 只探测 CI 临时模拟器是否满足门禁，尚不执行数据实验。主工作流运行这 22 项纯逻辑测试；手动工作流也分别运行自身的测试，checkout 锁定触发提交。
 - 直接对本地 0.3.145 与 0.3.149 APK 核对，三项 Rime assets 的 SHA-256 完全一致；两个 APK 自身 SHA256 分别与冻结清单中的 0.3.145 和验收记录中的 0.3.149 匹配。这只是文件身份/资源比较，不是 release 覆盖升级证据。
 
-本地验证：15 项 Python 测试通过、`actionlint` 检查三个工作流通过、Python 编译检查、Shell 语法检查与 `git diff --check` 通过。第一次推送的主工作流 #150 在启动后 1 分 19 秒失败，公开摘要没有展示失败步骤的具体日志，故暂不把原因断言为已定位；已移除设备门禁脚本对 `rg` 的依赖，并将两个 Python 测试拆成独立 CI 步骤以便定位，推送后继续复核。当前没有可用 Android SDK `aapt`/`apksigner` 或能启动的 Java 运行时，尚未针对真实 APK 执行预检器；也未验证 CI 模拟器实际开放 `adb root`。因此以上均标记为**前置实现，等待云端复核**，不提升 P0/P3 进度结论。本次没有安装/覆盖 APK、读取 release 用户目录、执行 force-stop/清数据、构建或发布新 APK，也没有运行真实 emulator A/B。
+本地验证：22 项 Python 测试通过、`actionlint` 检查三个工作流通过、Python 编译检查、Shell 语法检查与 `git diff --check` 通过。第一次推送的主工作流 [#150](https://github.com/Thanatophilia/xyu-ime/actions/runs/44894986725) 在启动后 1 分 19 秒失败；已下载原始日志，确认 Ubuntu runner 未预装 `rg`，导致假 adb 门禁测试提前失败。移除脚本的 `rg` 依赖后，#151 的两项脚本测试、编译、JVM 与 Lint 已通过，Android 全量仍在复核。第一次手动产物预检也因 APK 定位命令依赖缺失的 `rg` 失败，旧/新 artifact 下载本身成功；现明确安装 ripgrep，未以失败重跑覆盖首次失败记录。旧模拟器能力探测因缺少 KVM 准备而尚未给出结果，已取消并补齐 KVM 权限及管道失败传播；即使旧工作流最终显示绿色也不作为门禁通过证据。
+
+当前没有本地可用 Android SDK `aapt`/`apksigner` 或能启动的 Java 运行时；真实 APK 元数据解析及 CI 模拟器 `adb root` 仍需修正后的手动工作流验证。以上均为**前置实现，等待云端复核**，不提升 P0/P3 进度结论。未在手机上安装/覆盖、强杀或清数据，未读取 release 用户目录；未执行真实 emulator A/B。CI 主工作流可能产生常规 release artifact，但本轮不将其作为新的用户交付版本。
 
 ---
 
