@@ -71,7 +71,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            ./gradlew --no-daemon --stacktrace :rime-engine:connectedDebugAndroidTest
+            ./gradlew --no-daemon --stacktrace :rime-engine:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=org.thanatophilia.xyuime.rime.RimeNativePersistenceTest
+            bash scripts/d6-native-persistence.sh
             bash scripts/emulator-smoke.sh
       - name: Summarize emulator check
         if: always()

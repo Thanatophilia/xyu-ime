@@ -7,6 +7,11 @@
 #include <mutex>
 #include <algorithm>
 #include <stdexcept>
+#ifdef XYU_RIME_TEST_PROBES
+#include <rime_levers_api.h>
+#include <fstream>
+#include <cstdio>
+#endif
 
 // Always release librime-owned buffers, including when UTF conversion/allocation throws.
 template<class T, class F> struct RimeResource {
@@ -165,3 +170,51 @@ extern "C" JNIEXPORT void JNICALL JNI(shutdown)(JNIEnv* env, jobject) {
     std::lock_guard<std::mutex> lock(mutex);
     try { if (ready) { api->finalize(); ready = false; } } catch (...) { fail(env); }
 }
+
+#ifdef XYU_RIME_TEST_PROBES
+// Isolated D6 instrumentation only. Uses librime's exporter after all sessions close;
+// no direct reading/copying of an open LevelDB and no database text returned to Java.
+#define PROBE(name) Java_org_thanatophilia_xyuime_rime_RimeTestProbe_##name
+extern "C" JNIEXPORT jboolean JNICALL PROBE(isReady)(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(mutex);
+    return ready;
+}
+extern "C" JNIEXPORT jint JNICALL PROBE(learnedCommits)(
+    JNIEnv* env, jobject, jstring file, jstring phrase, jstring code) {
+    std::lock_guard<std::mutex> lock(mutex);
+    try {
+        if (!ready) throw std::runtime_error("probe needs isolated native initialization");
+        const auto path = utf8(env, file), text = utf8(env, phrase), reading = utf8(env, code);
+        // Restrict this observer to the documented synthetic phrase and test export location.
+        if (text != "你好你好" || reading != "ni hao ni hao" ||
+            path.find("/d6-native-persistence/") == std::string::npos ||
+            path.find("/../") != std::string::npos ||
+            path.size() < 17 || path.substr(path.size() - 17) != "/d6-user-dict.tsv")
+            throw std::invalid_argument("invalid test observation");
+        api->cleanup_all_sessions();
+        auto module = api->find_module("levers");
+        if (!module || !module->get_api) throw std::runtime_error("missing levers module");
+        auto levers = reinterpret_cast<RimeLeversApi*>(module->get_api());
+        if (!RIME_API_AVAILABLE(levers, export_user_dict)) throw std::runtime_error("missing exporter");
+        struct RemoveExport {
+            std::string path;
+            ~RemoveExport() { std::remove(path.c_str()); }
+        } cleanup{path};
+        const int exported = levers->export_user_dict("pinyin_simp", path.c_str());
+        if (exported < 0) throw std::runtime_error("test export failed");
+        std::ifstream input(path);
+        if (!input.is_open()) throw std::runtime_error("cannot open test export");
+        std::string line;
+        int commits = 0;
+        while (std::getline(input, line)) {
+            if (line.empty() || line.front() == '#') continue;
+            const auto first = line.find('\t');
+            const auto second = first == std::string::npos ? first : line.find('\t', first + 1);
+            if (first == std::string::npos || second == std::string::npos) continue;
+            if (line.substr(0, first) == text && line.substr(first + 1, second - first - 1) == reading)
+                commits = std::max(commits, std::stoi(line.substr(second + 1)));
+        }
+        return commits;
+    } catch (...) { fail(env); return -1; }
+}
+#endif

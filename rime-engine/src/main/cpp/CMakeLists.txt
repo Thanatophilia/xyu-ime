@@ -8,6 +8,10 @@ foreach(ARCHIVE rime yaml-cpp leveldb opencc marisa)
 endforeach()
 add_library(xyu_rime SHARED bridge.cpp)
 target_compile_features(xyu_rime PRIVATE cxx_std_17)
+# Test observations never ship in the release native library.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(xyu_rime PRIVATE XYU_RIME_TEST_PROBES=1)
+endif()
 target_include_directories(xyu_rime PRIVATE "${PREFIX}/include")
 target_link_libraries(xyu_rime PRIVATE
     "${PREFIX}/lib/librime.a" "${PREFIX}/lib/libyaml-cpp.a"

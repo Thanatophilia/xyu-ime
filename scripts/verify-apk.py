@@ -13,6 +13,7 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
         assert f'assets/rime/{asset}' in apk.namelist(), asset
     for name in libs:
         data = apk.read(name)
+        assert b'RimeTestProbe' not in data, (name, 'debug native probe must not ship')
         assert data[:6] == b'\x7fELF\x02\x01', name
         phoff = struct.unpack_from('<Q', data, 32)[0]
         entsize, count = struct.unpack_from('<HH', data, 54)
@@ -25,4 +26,7 @@ with zipfile.ZipFile(sys.argv[1]) as apk:
                 assert (address - offset) % 16384 == 0, (name, offset, address)
         assert loads, name
         print(f'{name}: {loads} LOAD segments aligned to 16 KB')
-    print('Both ABIs and bundled Rime resources verified')
+    for name in apk.namelist():
+        if name.endswith('.dex'):
+            assert b'RimeTestProbe' not in apk.read(name), 'debug JVM probe must not ship'
+    print('Both ABIs, bundled Rime resources, and absence of debug probes verified')

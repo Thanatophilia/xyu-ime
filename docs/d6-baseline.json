@@ -20,7 +20,7 @@
     "signer_certificate_sha256": "fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0",
     "workflow_run_id": 44784776028,
     "data_version_changed": false,
-    "status": "CI passed; not user-device accepted"
+    "status": "CI passed; user confirmed ordinary device regression on 2026-11-21, not full D6 acceptance"
   },
   "cloud_environment": {
     "android_api": 36,
