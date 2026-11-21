@@ -29,7 +29,7 @@
     "apk_sha256": "7ef1f6d27298cd3d7951bf52672cb11780579e8489d740bfce308a8bd671f2d6",
     "workflow_run_id": 44865969396,
     "data_version_changed": false,
-    "status": "CI passed, controlled finalize and four cold test processes; awaiting ordinary user check",
+    "status": "CI passed; user confirmed ordinary device regression on 2026-11-21; controlled finalize and four cold test processes verified, not full D6 acceptance",
     "evidence": "d6-native-evidence-149.json"
   },
   "cloud_environment": {
