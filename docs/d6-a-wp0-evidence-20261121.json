@@ -1,0 +1,57 @@
+{
+  "recorded_at": "2026-11-21",
+  "taskbook": "docs/d6-release-upgrade-a-taskbook.md",
+  "taskbook_approved": true,
+  "scope": "D6-A WP0 exact artifact freeze; no device actions",
+  "code_base": "c1f8e510a7e113817e75c67cc4c43705633d329b",
+  "result": "PASS",
+  "base": {
+    "artifact": "xyu-ime-0.3.145",
+    "workflow_run_id": 44714462726,
+    "version_code": 145,
+    "version_name": "0.3.145",
+    "commit": "9c0df3e86eeb31e5d7646957089f18f0ee86f409",
+    "apk_sha256": "2810845541a0fbaf80ad9d3c0f7a9da1570695fdcdac95a60c88d8f8418c6804",
+    "source_dir": "/tmp/xyu-d6-a145-wp0",
+    "sha256sums_match": true,
+    "build_metadata_match": true
+  },
+  "candidate": {
+    "artifact": "xyu-ime-0.3.149",
+    "workflow_run_id": 44865969396,
+    "version_code": 149,
+    "version_name": "0.3.149",
+    "commit": "42a230e4d41d787612e4c64bd5be75d5ad9f81cd",
+    "apk_sha256": "7ef1f6d27298cd3d7951bf52672cb11780579e8489d740bfce308a8bd671f2d6",
+    "source_dir": "/tmp/xyu-d6-a149-wp0",
+    "sha256sums_match": true,
+    "build_metadata_match": true
+  },
+  "shared_identity": {
+    "package_name": "org.thanatophilia.xyuime",
+    "signer_certificate_sha256": "fa62895fa256fb286acb6546a1663331af42fa08abac4c1ce3fa1645ee90d7d0",
+    "data_version": "pinyin-simp-0c6861e-3",
+    "abis": ["arm64-v8a", "x86_64"],
+    "rime_assets_identical": true,
+    "debug_probe_absent": true
+  },
+  "cloud_preflight": {
+    "run_id": 44898462928,
+    "result": "PASS",
+    "report": "/tmp/xyu-d6-preflight-pass/preflight.json",
+    "scope": "Historical real aapt/apksigner report cross-check; not a new live signature or device gate run"
+  },
+  "live_signature_verified": false,
+  "device_gate_satisfied": false,
+  "device_actions": false,
+  "release_data_access": false,
+  "next_gate": "WP1 independent UI fixture and observer calibration",
+  "not_proven": [
+    "145 installation or offline input",
+    "stored learning record persistence",
+    "145 to 149 in-place upgrade",
+    "release user data preservation",
+    "B resource-version path",
+    "process interruption or service reconstruction"
+  ]
+}

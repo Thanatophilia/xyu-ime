@@ -11,6 +11,7 @@ target_compile_features(xyu_rime PRIVATE cxx_std_17)
 # Test observations never ship in the release native library.
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(xyu_rime PRIVATE XYU_RIME_TEST_PROBES=1)
+    target_sources(xyu_rime PRIVATE d6_snapshot_probe.cpp)
 endif()
 target_include_directories(xyu_rime PRIVATE "${PREFIX}/include")
 target_link_libraries(xyu_rime PRIVATE

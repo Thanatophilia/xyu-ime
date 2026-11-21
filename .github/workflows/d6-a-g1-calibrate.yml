@@ -1,0 +1,88 @@
+name: D6-A G1 Fixture and Snapshot Calibration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d6-a-g1-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  g1:
+    name: Calibrate test facilities only (no release installation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      D6_DISPOSABLE_EMULATOR: 'YES'
+      ANDROID_SERIAL: emulator-5554
+    steps:
+      - name: Require manual main execution
+        env:
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: test "$REF" = refs/heads/main && test "$EVENT" = workflow_dispatch
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: actions/cache@v4
+        id: native-cache
+        with:
+          path: .native/install
+          key: rime-1.17.0-ndk28-${{ hashFiles('scripts/build-rime.sh') }}
+      - name: Install pinned native toolchain
+        run: |
+          sdkmanager 'ndk;28.2.13676358' 'cmake;3.22.1'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmake/3.22.1/bin" >> "$GITHUB_PATH"
+      - name: Build native dependencies on cache miss
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-rime.sh
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Existing safety gates and WP0 logical tests
+        run: |
+          python3 scripts/test-d6-release-preflight.py
+          python3 scripts/test-d6-emulator-preflight.py
+          python3 scripts/test-d6-release-upgrade-a-wp0.py
+          python3 scripts/test-d6-a-g1-report.py
+      - name: Compile and test isolated facilities
+        run: ./gradlew --no-daemon --stacktrace :d6-upgrade-fixture:testDebugUnitTest :d6-upgrade-fixture:lintDebug :d6-upgrade-fixture:assembleDebug :d6-upgrade-fixture:assembleDebugAndroidTest :rime-engine:testDebugUnitTest :rime-engine:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Calibrate editor mechanism and cold-copy observer
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/d6-a-g1-calibrate.sh
+      - name: Upload allowlisted calibration evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d6-a-g1-${{ github.run_id }}
+          path: |
+            d6-a-g1-report/
+            d6-upgrade-fixture/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Explain evidence boundary
+        if: always()
+        run: |
+          echo 'G1 tests independent synthetic calibration data only. No original145/149 APK is downloaded or installed; no release data is read. G2-G5 are not run.' >> "$GITHUB_STEP_SUMMARY"

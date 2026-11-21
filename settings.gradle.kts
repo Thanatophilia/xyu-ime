@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "XyuIME"
-include(":app", ":rime-engine")
+include(":app", ":rime-engine", ":d6-upgrade-fixture")
