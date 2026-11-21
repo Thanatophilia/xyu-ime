@@ -53,11 +53,12 @@ jobs:
           path: .native/install
           key: rime-1.17.0-ndk28-${{ hashFiles('scripts/build-rime.sh') }}
       - uses: gradle/actions/setup-gradle@v4
+      - name: Test release APK preflight rules
+        run: python3 scripts/test-d6-release-preflight.py
+      - name: Test disposable emulator safety gate
+        run: python3 scripts/test-d6-emulator-preflight.py
       - name: Compile, unit tests and Android lint
-        run: |
-          python3 scripts/test-d6-release-preflight.py
-          python3 scripts/test-d6-emulator-preflight.py
-          ./gradlew --no-daemon --stacktrace :rime-engine:testDebugUnitTest :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest :rime-engine:assembleDebugAndroidTest
+        run: ./gradlew --no-daemon --stacktrace :rime-engine:testDebugUnitTest :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest :rime-engine:assembleDebugAndroidTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

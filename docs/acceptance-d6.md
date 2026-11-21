@@ -13,7 +13,7 @@
 - `.github/workflows/d6-release-preflight.yml` 只下载并检查原始基线/候选 APK，**不安装 APK、不处理用户目录**；`.github/workflows/d6-emulator-preflight.yml` 只探测 CI 临时模拟器是否满足门禁，尚不执行数据实验。主工作流运行这 15 项纯逻辑测试。
 - 直接对本地 0.3.145 与 0.3.149 APK 核对，三项 Rime assets 的 SHA-256 完全一致；两个 APK 自身 SHA256 分别与冻结清单中的 0.3.145 和验收记录中的 0.3.149 匹配。这只是文件身份/资源比较，不是 release 覆盖升级证据。
 
-本地验证：15 项 Python 测试通过、`actionlint` 检查三个工作流通过、Python 编译检查、Shell 语法检查与 `git diff --check` 通过。当前没有可用 Android SDK `aapt`/`apksigner` 或能启动的 Java 运行时，尚未针对真实 APK 执行预检器；也未验证 CI 模拟器实际开放 `adb root`。因此以上均标记为**前置实现，等待云端复核**，不提升 P0/P3 进度结论。本次没有安装/覆盖 APK、读取 release 用户目录、执行 force-stop/清数据、构建或发布新 APK，也没有运行真实 emulator A/B。
+本地验证：15 项 Python 测试通过、`actionlint` 检查三个工作流通过、Python 编译检查、Shell 语法检查与 `git diff --check` 通过。第一次推送的主工作流 #150 在启动后 1 分 19 秒失败，公开摘要没有展示失败步骤的具体日志，故暂不把原因断言为已定位；已移除设备门禁脚本对 `rg` 的依赖，并将两个 Python 测试拆成独立 CI 步骤以便定位，推送后继续复核。当前没有可用 Android SDK `aapt`/`apksigner` 或能启动的 Java 运行时，尚未针对真实 APK 执行预检器；也未验证 CI 模拟器实际开放 `adb root`。因此以上均标记为**前置实现，等待云端复核**，不提升 P0/P3 进度结论。本次没有安装/覆盖 APK、读取 release 用户目录、执行 force-stop/清数据、构建或发布新 APK，也没有运行真实 emulator A/B。
 
 ---
 

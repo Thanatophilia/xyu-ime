@@ -12,7 +12,8 @@ fail() { printf 'D6 emulator preflight refused: %s\n' "$1" >&2; exit 2; }
 command -v adb >/dev/null 2>&1 || fail "adb is unavailable"
 
 serial="$ANDROID_SERIAL"
-adb -s "$serial" get-state 2>/dev/null | rg -qx 'device' || fail "selected emulator is not online"
+state="$(adb -s "$serial" get-state 2>/dev/null | tr -d '\r')"
+[[ "$state" == "device" ]] || fail "selected emulator is not online"
 qemu="$(adb -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')"
 [[ "$qemu" == "1" ]] || fail "selected device does not identify itself as an emulator"
 api="$(adb -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')"
