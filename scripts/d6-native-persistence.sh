@@ -20,9 +20,14 @@ for phase in seed verify fault recover; do
   # open-DB crash test; that separate D6 gate remains outstanding.
   timeout 240s adb shell am instrument -w -r -e class "$CLASS" -e d6Phase "$phase" "$RUNNER" \
     > "$OUT/$phase-instrumentation.txt" 2>&1
-  if ! rg -q 'OK \(1 test\)' "$OUT/$phase-instrumentation.txt"; then
-    cat "$OUT/$phase-instrumentation.txt" >&2; exit 1
-  fi
+  python3 - "$OUT/$phase-instrumentation.txt" <<'PY'
+import re,sys
+from pathlib import Path
+text=Path(sys.argv[1]).read_text()
+if not re.search(r'OK \(1 test\)', text) or 'FAILURES!!!' in text or 'INSTRUMENTATION_FAILED' in text:
+    print(text, file=sys.stderr)
+    raise SystemExit('Isolated native phase failed')
+PY
   timeout 20s adb shell run-as "$PKG" cat "files/d6-native-evidence/$phase.json" > "$OUT/$phase.json"
 done
 python3 - "$OUT" <<'PY'
