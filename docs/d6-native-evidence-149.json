@@ -1,0 +1,51 @@
+{
+  "workflow_run": 44865969396,
+  "workflow_number": 149,
+  "commit": "42a230e4d41d787612e4c64bd5be75d5ad9f81cd",
+  "environment": "disposable Android 36 x86_64 emulator",
+  "fixture_package": "org.thanatophilia.xyuime.rime.test",
+  "phrase_id": "synthetic-pinyin-01",
+  "seed": {
+    "process": "3778:88400",
+    "negative_control_user_commits": 0,
+    "learned_user_commits": 3,
+    "native_finalize_reinitialize": "PASS"
+  },
+  "verify": {
+    "process": "3968:91795",
+    "user_record_commits": 3,
+    "closed_files_match_before_open": "PASS",
+    "candidate_reading": "PASS"
+  },
+  "fault": {
+    "process": "4036:94550",
+    "original_commits": 3,
+    "modified_commits": 5,
+    "native_closed_before_process_stop": true,
+    "transaction_state": "pending"
+  },
+  "recover": {
+    "process": "4132:96791",
+    "restored_commits": 3,
+    "recovery_repeated": 2,
+    "closed_snapshot_files_exact_match": "PASS",
+    "candidate_reading": "PASS"
+  },
+  "ordinary_regression": {
+    "app_tests": 80,
+    "rime_tests": 11,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native_phases_separately_invoked": 4,
+  "release_probe_absence": "PASS: both native ABIs and DEX contain no RimeTestProbe",
+  "boundaries": [
+    "debug isolated fixture using bundled assets and NativeRime, not the running IME service",
+    "sessions explicitly destroyed before safe levers export; export may affect flushing",
+    "all database hashes taken after proven native finalize",
+    "each process is stopped only after native engine is finalized",
+    "not a crash while LevelDB is open, not a release APK in-place upgrade",
+    "no explicit sync_user_data, but test export/session destruction/finalize are controlled interventions"
+  ]
+}

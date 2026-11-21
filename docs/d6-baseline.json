@@ -22,6 +22,16 @@
     "data_version_changed": false,
     "status": "CI passed; user confirmed ordinary device regression on 2026-11-21, not full D6 acceptance"
   },
+  "second_batch_candidate": {
+    "version_name": "0.3.149",
+    "version_code": 149,
+    "code_commit": "42a230e4d41d787612e4c64bd5be75d5ad9f81cd",
+    "apk_sha256": "7ef1f6d27298cd3d7951bf52672cb11780579e8489d740bfce308a8bd671f2d6",
+    "workflow_run_id": 44865969396,
+    "data_version_changed": false,
+    "status": "CI passed, controlled finalize and four cold test processes; awaiting ordinary user check",
+    "evidence": "d6-native-evidence-149.json"
+  },
   "cloud_environment": {
     "android_api": 36,
     "abi": "x86_64",
@@ -32,7 +42,7 @@
   "not_yet_verified": [
     "source release APK installation baseline on a designated disposable device",
     "real release-to-release in-place upgrade and user-data preservation",
-    "native learned-entry persistence after finalize, process death or upgrade",
+    "learned-entry persistence after unfinalized open-DB process kill or release upgrade",
     "16 KB kernel runtime loading",
     "full R01-R12 process-interruption matrix"
   ],
